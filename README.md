@@ -18,8 +18,14 @@ pip install -r requirements.txt
 ### Create database tables
 
 ```
-python manage.py makemigrations files
+python manage.py makemigrations cohort
 python manage.py migrate
+```
+
+### Load base data
+
+```
+python manage.py loaddata cohort/fixtures/data.json
 ```
 
 ## Details & Development

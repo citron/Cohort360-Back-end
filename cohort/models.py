@@ -6,7 +6,6 @@ from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, Permis
     Permission, GroupManager
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
-from rest_framework.generics import get_object_or_404
 
 from zxcvbn import zxcvbn
 
@@ -61,6 +60,12 @@ class UserManager(BaseUserManager):
         user.save(using=self.db)
         return user
 
+    def create_super_user(self, username, password, email):
+        user = self.create_simple_user(username=username, auth_type="SIMPLE", password=password, email=email)
+        user.is_superuser = True
+        user.is_active = True
+        user.save()
+
 
 class BaseModel(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid4, editable=False, auto_created=True)
@@ -93,7 +98,7 @@ class User(BaseModel, AbstractBaseUser):
 
     def check_password(self, raw_password):
         if self.auth_type == 'SIMPLE':
-            super(User, self).check_password(raw_password)
+            return super(User, self).check_password(raw_password)
         if self.auth_type == 'LDAP':
             # TODO
             return True
