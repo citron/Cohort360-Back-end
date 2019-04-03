@@ -1,3 +1,4 @@
+import re
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
@@ -5,8 +6,21 @@ from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, Permis
     Permission, GroupManager
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
+from rest_framework.generics import get_object_or_404
+
+from zxcvbn import zxcvbn
 
 from cohort.exceptions import UnsupportedFeatureError
+from cohort_back.settings import COHORT_CONF
+
+
+def is_valid_username(username, auth_type):
+    username_regex = COHORT_CONF["AUTH_METHODS"][auth_type]["USERNAME_REGEX"]
+    if username_regex is not None:
+        pattern = re.compile(username_regex)
+        if not pattern.match(username):
+            return False
+    return True
 
 
 class UserManager(BaseUserManager):
@@ -16,23 +30,34 @@ class UserManager(BaseUserManager):
         if not auth_type:
             raise ValueError('Users must have a type (SIMPLE|LDAP).')
 
+        if auth_type == 'SIMPLE':
+            if not email:
+                raise ValueError('Users with auth_type=SIMPLE must specify a valid email address.')
+
+            if zxcvbn(password, [])['score'] < 2:
+                raise ValueError("Password is too weak.")
+            elif zxcvbn(password, [])['score'] > 4:
+                raise ValueError("Password is too complex.")
+
+        if not is_valid_username(username=username, auth_type=auth_type):
+            raise ValueError("Invalid username.")
+
         if auth_type == 'LDAP':
+            if email:
+                raise ValueError('Users with auth_type=LDAP cannot specify an email address.')
+
             # TODO: check that the user exists in LDAP and get its email address for later
             exists_in_ldap = True
             if not exists_in_ldap:
                 raise ValueError("User does not exists in LDAP.")
 
-        user = get_user_model()(username=username, type=auth_type, email=email)
+        user = get_user_model()(username=username, auth_type=auth_type, email=email)
         if auth_type == 'SIMPLE':
             user.set_password(password)
-        user.is_active = True
-        user.save(using=self.db)
-        return user
-
-    def create_superuser(self, email, password):
-        user = self.create_user(email, password=password)
-        user.is_staff = True
-        user.is_active = True
+        if auth_type == 'LDAP':
+            # Verify the password via ldap
+            # TODO
+            user.is_active = True
         user.save(using=self.db)
         return user
 
@@ -44,6 +69,7 @@ class BaseModel(models.Model):
 
     class Meta:
         abstract = True
+
 
 class User(BaseModel, AbstractBaseUser):
     objects = UserManager()
@@ -61,13 +87,13 @@ class User(BaseModel, AbstractBaseUser):
 
     def set_password(self, raw_password):
         if self.auth_type == 'SIMPLE':
-            super(User).set_password(raw_password)
+            super(User, self).set_password(raw_password)
         if self.auth_type == 'LDAP':
             raise UnsupportedFeatureError()
 
     def check_password(self, raw_password):
         if self.auth_type == 'SIMPLE':
-            super(User).check_password(raw_password)
+            super(User, self).check_password(raw_password)
         if self.auth_type == 'LDAP':
             # TODO
             return True
@@ -75,47 +101,10 @@ class User(BaseModel, AbstractBaseUser):
     def get_groups(self):
         return Group.objects.filter(members__in=[self])
 
-    def get_user_permissions(self, *args, **kwargs):
-        return set()
-
-    def get_group_permissions(self, obj=None):
-        if not self.is_active:
-            return set()
-
-        if self.is_superuser:
-            return Permission.objects.all()
-
-        my_groups = self.get_groups()
-        return Permission.objects.filter(groups__in=my_groups)
-
-    def get_all_permissions(self, obj=None):
-        return self.get_group_permissions()
-
-    def has_perm(self, perm, obj=None):
-        if not self.is_active:
-            return False
-
+    def is_admin(self):
         if self.is_superuser:
             return True
-
-        return perm in self.get_all_permissions(obj)
-
-
-    def has_perms(self, perm_list, obj=None):
-        return all(self.has_perm(perm, obj) for perm in perm_list)
-
-    def has_module_perms(self, app_label):
-        if not self.is_active:
-            return False
-
-        if self.is_superuser:
-            return True
-
-        return any(
-            perm[:perm.index('.')] == app_label
-            for perm in self.get_all_permissions(self)
-        )
-
+        return self in Group.objects.get(name="admin").members
 
 
 class Group(BaseModel):
@@ -124,14 +113,6 @@ class Group(BaseModel):
 
     name = models.CharField('name', max_length=80, unique=True)
     members = models.ManyToManyField(User)
-    auth_type = models.CharField(max_length=6, choices=[("SIMPLE", 'Simple'), ('LDAP', 'LDAP')])
-    permissions = models.ManyToManyField(
-        Permission,
-        verbose_name='permissions',
-        blank=True,
-        related_name='groups'
-    )
-
     objects = GroupManager()
 
     class Meta:
@@ -145,30 +126,27 @@ class Group(BaseModel):
         return (self.name,)
 
     def add_member(self, user):
-        if self.auth_type == 'SIMPLE':
+        if user.auth_type == 'SIMPLE':
             self.members.add(user)
             self.save()
-        if self.auth_type == 'LDAP':
+        if user.auth_type == 'LDAP':
             raise UnsupportedFeatureError()
 
     def del_member(self, user):
-        if self.auth_type == 'SIMPLE':
+        if user.auth_type == 'SIMPLE':
             self.members.remove(user)
             self.save()
-        if self.auth_type == 'LDAP':
+        if user.auth_type == 'LDAP':
             raise UnsupportedFeatureError()
 
     def is_member(self, user):
-        if self.auth_type == 'SIMPLE':
-            try:
-                self.members.get(user=user)
-                return True
-            except ObjectDoesNotExist:
-                return False
-        if self.auth_type == 'LDAP':
-            # TODO
+        try:
+            self.members.get(user=user)
             return True
+        except ObjectDoesNotExist:
+            return False
 
     def refresh_from_ldap(self):
         # TODO
+        mappings = COHORT_CONF["AUTH_METHODS"]["LDAP"]["GROUPS_MAPPING"]
         pass

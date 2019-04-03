@@ -18,16 +18,21 @@ from django.urls import include
 
 from rest_framework import routers
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
+from rest_framework_swagger.views import get_swagger_view
 
-from cohort.views import UserViewSet
+from cohort.views import UserViewSet, GroupViewSet
 
 
 # Routers provide an easy way of automatically determining the URL conf.
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet)
+router.register(r'groups', GroupViewSet)
+
+schema_view = get_swagger_view(title='Cohort360 API')
 
 urlpatterns = [
     url(r'^', include(router.urls)),
+    url(r'^docs/', schema_view),
     url(r'^api-auth/', include('rest_framework.urls')),
     url(r'^api/jwt/$', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     url(r'^api/jwt/refresh/$', TokenRefreshView.as_view(), name='token_refresh'),
