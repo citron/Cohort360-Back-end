@@ -39,7 +39,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    'django_filters',
+
     'rest_framework',
+    'rest_framework_swagger',
 
     'cohort.apps.CohortConfig',
 ]
@@ -59,8 +62,7 @@ ROOT_URLCONF = 'cohort_back.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')]
-        ,
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -130,9 +132,10 @@ AUTH_USER_MODEL = 'cohort.User'
 REST_FRAMEWORK = {
     # Use Django's standard `django.contrib.auth` permissions,
     # or allow read-only access for unauthenticated users.
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ]
+    # 'DEFAULT_PERMISSION_CLASSES': [
+    #     'rest_framework_simplejwt.authentication.JWTAuthentication',
+    # ]
+    'DEFAULT_FILTER_BACKENDS': ('django_filters.rest_framework.DjangoFilterBackend',)
 }
 
 SIMPLE_JWT = {
@@ -157,14 +160,14 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
-ROLES_RIGHTS = {
-    'ADMIN': [],
-    'DATASCIENTIST': [],
-    'PHYSICIAN': [],
-}
 
-LDAP_ROLES_MAPPING = {
-    'ADMIN': 'CN=...A',
-    'DATASCIENTIST': 'CN=...D',
-    'PHYSICIAN': 'CN=...P',
+COHORT_CONF = {
+    "AUTH_METHODS": {
+        "SIMPLE": {
+        },
+        "LDAP": {
+            "GROUPS_MAPPING": {
+            }
+        }
+    }
 }

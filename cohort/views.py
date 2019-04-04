@@ -1,3 +1,4 @@
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny
 
@@ -10,6 +11,9 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializerCreate
     http_method_names = ['get', 'post', 'put', 'patch', 'delete']
+
+    filter_backends = (DjangoFilterBackend,)
+    filterset_fields = ('username', 'email', 'is_active',)
 
     def get_serializer_class(self):
         serializer_class = self.serializer_class
@@ -34,6 +38,9 @@ class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
     http_method_names = ['get', 'patch']
+
+    filter_backends = (DjangoFilterBackend,)
+    filterset_fields = ('name',)
 
     def get_permissions(self):
         if self.request.method == 'PATCH':

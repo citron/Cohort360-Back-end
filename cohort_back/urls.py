@@ -30,11 +30,14 @@ router.register(r'groups', GroupViewSet)
 
 schema_view = get_swagger_view(title='Cohort360 API')
 
+internal_urls = [
+]
+
 urlpatterns = [
     url(r'^', include(router.urls)),
-    url(r'^docs/', schema_view),
-    url(r'^accounts/', include('rest_framework.urls')),
     url(r'^jwt/$', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     url(r'^jwt/refresh/$', TokenRefreshView.as_view(), name='token_refresh'),
     url(r'^jwt/verify/$', TokenVerifyView.as_view(), name='token_verify'),
+    url(r'^docs/', schema_view),
+    url(r'^accounts/', include('rest_framework.urls')),
 ]
