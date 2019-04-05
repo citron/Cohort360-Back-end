@@ -2,7 +2,7 @@ from django.db import IntegrityError
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
-from cohort.models import UserManager, is_valid_username
+from cohort.models import UserManager, is_valid_username, Group
 
 UserModel = get_user_model()
 
@@ -83,11 +83,12 @@ class GroupSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(read_only=True)
     modified_at = serializers.DateTimeField(read_only=True)
 
-    name = serializers.CharField(max_length=80, read_only=True)
-    members = serializers.PrimaryKeyRelatedField(many=True, queryset=UserModel.objects.all())
+    name = serializers.CharField(max_length=80)
+    members = serializers.PrimaryKeyRelatedField(many=True, queryset=UserModel.objects.all(), required=False)
+    ldap_corresponding_group = serializers.CharField(max_length=500, required=False)
 
     class Meta:
-        model = UserModel
+        model = Group
         fields = ("uuid", "created_at", "modified_at",
-                  "name", "members")
+                  "name", "members", "ldap_corresponding_group")
 

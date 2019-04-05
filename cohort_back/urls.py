@@ -21,12 +21,16 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_swagger.views import get_swagger_view
 
 from cohort.views import UserViewSet, GroupViewSet
+from explorations.views import ExplorationViewSet, RequestViewSet, CohortViewSet
 
 
 # Routers provide an easy way of automatically determining the URL conf.
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet)
 router.register(r'groups', GroupViewSet)
+router.register(r'explorations', ExplorationViewSet)
+router.register(r'requests', RequestViewSet)
+router.register(r'cohorts', CohortViewSet)
 
 schema_view = get_swagger_view(title='Cohort360 API')
 

@@ -6,6 +6,7 @@ from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, Permis
     Permission, GroupManager
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
+from rest_framework.exceptions import PermissionDenied
 
 from zxcvbn import zxcvbn
 
@@ -118,6 +119,7 @@ class Group(BaseModel):
 
     name = models.CharField('name', max_length=80, unique=True)
     members = models.ManyToManyField(User)
+    ldap_corresponding_group = models.CharField(max_length=500, blank=True)
     objects = GroupManager()
 
     class Meta:
@@ -126,6 +128,11 @@ class Group(BaseModel):
 
     def __str__(self):
         return self.name
+
+    def delete(self, using=None, keep_parents=False):
+        if self.name == "admin" or self.name == "research" or self.name == "care":
+            raise PermissionDenied()
+        return super(Group, self).delete(using=using, keep_parents=keep_parents)
 
     def natural_key(self):
         return (self.name,)

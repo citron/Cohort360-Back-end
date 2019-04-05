@@ -1,4 +1,5 @@
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny
 
@@ -12,8 +13,11 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializerCreate
     http_method_names = ['get', 'post', 'put', 'patch', 'delete']
 
-    filter_backends = (DjangoFilterBackend,)
+    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
     filterset_fields = ('username', 'email', 'is_active',)
+    ordering_fields = ('created_at', 'modified_at', 'username', 'email',)
+    ordering = ('username',)
+    search_fields = ('$username', '$email',)
 
     def get_serializer_class(self):
         serializer_class = self.serializer_class
@@ -24,26 +28,23 @@ class UserViewSet(viewsets.ModelViewSet):
         return serializer_class
 
     def get_permissions(self):
-        if self.request.method == 'DELETE':
-            return [IsOwner(), IsAdmin()]
-        elif self.request.method == 'PUT' or self.request.method == 'PATCH':
-            return [IsOwner(), IsAdmin()]
-        elif self.request.method == 'GET':
-            return [IsOwner(), IsAdmin()]
-        else:
+        if self.request.method in ['GET', 'PUT', 'PATCH', 'DELETE']:
+            return [IsAdmin(), IsOwner()]
+        elif self.request.method == 'POST':
             return [AllowAny()]
 
 
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
-    http_method_names = ['get', 'patch']
+    http_method_names = ['get', 'post', 'patch', 'delete']
 
-    filter_backends = (DjangoFilterBackend,)
+    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
     filterset_fields = ('name',)
+    ordering_fields = ('created_at', 'modified_at', 'name',)
+    ordering = ('name',)
+    search_fields = ('$name',)
 
     def get_permissions(self):
-        if self.request.method == 'PATCH':
-            return [IsAdmin()]
-        elif self.request.method == 'GET':
+        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
             return [IsAdmin()]

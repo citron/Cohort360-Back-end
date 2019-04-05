@@ -19,6 +19,7 @@ pip install -r requirements.txt
 
 ```
 python manage.py makemigrations cohort
+python manage.py makemigrations explorations
 python manage.py migrate
 ```
 
