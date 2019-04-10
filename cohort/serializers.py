@@ -7,7 +7,7 @@ from cohort.models import UserManager, is_valid_username, Group
 UserModel = get_user_model()
 
 
-class UserSerializerCreate(serializers.ModelSerializer):
+class UserSerializer(serializers.ModelSerializer):
     uuid = serializers.UUIDField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     modified_at = serializers.DateTimeField(read_only=True)
@@ -18,6 +18,16 @@ class UserSerializerCreate(serializers.ModelSerializer):
     auth_type = serializers.ChoiceField(choices=UserModel.AUTH_TYPE_CHOICES)
     is_active = serializers.BooleanField(read_only=True)
 
+    groups = serializers.PrimaryKeyRelatedField(many=True, queryset=Group.objects.all(), required=False)
+
+    class Meta:
+        model = UserModel
+        fields = ("uuid", "created_at", "modified_at",
+                  "username", "password", "email", "auth_type", "is_active",
+                  "groups",)
+
+
+class UserSerializerCreate(UserSerializer):
     def create(self, validated_data):
         user = None
         try:
@@ -34,22 +44,8 @@ class UserSerializerCreate(serializers.ModelSerializer):
             raise serializers.ValidationError(str(e), code="internal")
         return user
 
-    class Meta:
-        model = UserModel
-        fields = ("uuid", "created_at", "modified_at",
-                  "username", "password", "email", "auth_type", "is_active")
 
-
-class UserSerializerUpdate(serializers.ModelSerializer):
-    uuid = serializers.UUIDField(read_only=True)
-    created_at = serializers.DateTimeField(read_only=True)
-    modified_at = serializers.DateTimeField(read_only=True)
-
-    username = serializers.CharField(max_length=30)
-    password = serializers.CharField(write_only=True)
-    email = serializers.EmailField(max_length=254, required=False)
-    auth_type = serializers.ChoiceField(choices=UserModel.AUTH_TYPE_CHOICES, read_only=True)
-    is_active = serializers.BooleanField(read_only=True)
+class UserSerializerUpdate(UserSerializer):
 
     def update(self, instance, validated_data):
         if 'username' in validated_data:
@@ -72,11 +68,6 @@ class UserSerializerUpdate(serializers.ModelSerializer):
         instance.save()
         return instance
 
-    class Meta:
-        model = UserModel
-        fields = ("uuid", "created_at", "modified_at",
-                  "username", "password", "email", "auth_type", "is_active")
-
 
 class GroupSerializer(serializers.ModelSerializer):
     uuid = serializers.UUIDField(read_only=True)
@@ -91,4 +82,3 @@ class GroupSerializer(serializers.ModelSerializer):
         model = Group
         fields = ("uuid", "created_at", "modified_at",
                   "name", "members", "ldap_corresponding_group")
-

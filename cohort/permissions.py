@@ -1,4 +1,5 @@
 from rest_framework import permissions
+from rest_framework.permissions import OR as drf_OR
 
 
 class IsOwner(permissions.BasePermission):
@@ -30,3 +31,13 @@ class IsShared(permissions.BasePermission):
         if hasattr(obj, "shared"):
             return obj.shared
         return False
+
+
+def OR(*perms):
+    if len(perms) < 1:
+        raise ValueError("OR takes at list one Permission.")
+
+    result = perms[0]
+    for perm in perms[1:]:
+        result = drf_OR(result, perm)
+    return [result]

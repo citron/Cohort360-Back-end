@@ -1,4 +1,6 @@
-from cohort.models import BaseModel, User
+import json
+
+from cohort.models import BaseModel, User, Group
 from django.db import models
 
 
@@ -42,7 +44,13 @@ class Request(BaseModel):
     refresh_every = models.BigIntegerField(default=0)
     refresh_new_number_of_patients = models.BigIntegerField(default=0)
 
+    serialized_query = models.TextField(default="{}")
+
     def __save__(self, *args, **kwargs):
+        try:
+            json.loads(self.serialized_query)
+        except json.decoder.JSONDecodeError as e:
+            raise ValueError('value_v1 is not a valid JSON ' + str(e))
         super(Request, self).save(*args, **kwargs)
 
     def get_cohorts(self):
@@ -60,4 +68,5 @@ class Cohort(BaseModel):
     description = models.TextField(blank=True)
     shared = models.BooleanField(default=False)
 
+    group = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True)
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='cohorts')

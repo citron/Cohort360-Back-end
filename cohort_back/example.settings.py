@@ -11,9 +11,12 @@ https://docs.djangoproject.com/en/2.1/ref/settings/
 """
 
 import os
+import ssl
 from datetime import timedelta
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
+from ldap3 import Server, IP_V4_PREFERRED, ROUND_ROBIN, ServerPool, Tls, NTLM, RESTARTABLE, Connection, SUBTREE
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -171,8 +174,73 @@ COHORT_CONF = {
         "SIMPLE": {
         },
         "LDAP": {
-            "GROUPS_MAPPING": {
-            }
+            "USERNAME_REGEX": "user[2-9].*"
         }
+    },
+    "REFRESH_REQUESTS": {
+        "MIN_DELAY_SEC": 60 * 60 * 2  # Every two hours
     }
 }
+
+SWAGGER_SETTINGS = {
+    "LOGOUT_URL": "/accounts/logout",
+}
+
+
+# LDAP AD
+
+QUAL_URLS = [
+    "ldaps://{}.qual.domain.com".format(i)
+    for i in range(1, 5)
+]
+QUAL_DOMAIN = "qual"
+
+PROD_URLS = [
+    "ldaps://{}.prod.domain.com".format(i)
+    for i in range(1, 15)
+]
+PROD_DOMAIN = "prod"
+
+DOMAIN = QUAL_DOMAIN if DEBUG else PROD_DOMAIN
+prod = not DEBUG
+
+LDAP_BASE_DN = "DC={},DC=domain,DC=com".format(DOMAIN)
+
+tls = Tls(
+    version=ssl.PROTOCOL_SSLv23,
+    ca_certs_file='/path/to/ldap.crt',
+)
+
+servers = [
+    Server(url, port=636, use_ssl=True, tls=tls, mode=IP_V4_PREFERRED)
+    for url in (PROD_URLS if prod else QUAL_URLS)
+]
+
+LDAP_SERVER_POOL = ServerPool(servers, ROUND_ROBIN, active=True, exhaust=True)
+
+LDAP_CONNECTION_PARAMETERS = {
+    "server": LDAP_SERVER_POOL,
+    "authentication": NTLM,
+    "client_strategy": RESTARTABLE,
+}
+
+LDAP_CONNECTION = Connection(
+    user=DOMAIN.upper() + '\\' + 'bind_account',
+    password="bind_password",
+    **LDAP_CONNECTION_PARAMETERS
+)
+
+if LDAP_CONNECTION.bind() is False:
+    print("Bind operation failed: ", LDAP_CONNECTION.result)
+    exit(1)
+
+LDAP_SEARCH_FILTER = '(&(objectClass=inetOrgPerson)(sAMAccountName={}))'
+LDAP_SEARCH_SCOPE = SUBTREE
+
+LDAP_AUTH_USERNAME = DOMAIN.upper() + '\\' + '{}'
+
+LDAP_DISPLAY_NAME_ATTR = "displayName"
+LDAP_USERNAME_ATTR = "cn"
+LDAP_FIRSTNAME_ATTR = "givenName"
+LDAP_LASTNAME_ATTR = "sn"
+LDAP_EMAIL_ATTR = "mail"

@@ -11,6 +11,7 @@ from rest_framework.exceptions import PermissionDenied
 from zxcvbn import zxcvbn
 
 from cohort.exceptions import UnsupportedFeatureError
+from cohort.ldap import LDAP
 from cohort_back.settings import COHORT_CONF
 
 
@@ -24,11 +25,18 @@ def is_valid_username(username, auth_type):
 
 
 class UserManager(BaseUserManager):
-    def create_simple_user(self, username, auth_type, password, email=None):
+    def create_simple_user(self, username, auth_type, password, email=None, displayname="", firstname="", lastname=""):
         if not username:
             raise ValueError('Users must have an username.')
         if not auth_type:
             raise ValueError('Users must have a type (SIMPLE|LDAP).')
+
+        if len(displayname) > 50:
+            raise ValueError("displayname too long (maximum = 50 characters).")
+        if len(firstname) > 30:
+            raise ValueError("firstname too long (maximum = 30 characters).")
+        if len(lastname) > 30:
+            raise ValueError("lastname too long (maximum = 30 characters).")
 
         if auth_type == 'SIMPLE':
             if not email:
@@ -42,22 +50,35 @@ class UserManager(BaseUserManager):
         if not is_valid_username(username=username, auth_type=auth_type):
             raise ValueError("Invalid username.")
 
-        if auth_type == 'LDAP':
+        user = None
+        if auth_type == 'SIMPLE':
+            user = get_user_model()(
+                username=username,
+                auth_type=auth_type,
+                email=email,
+                displayname=displayname,
+                firstname=firstname,
+                lastname=lastname
+            )
+            user.set_password(password)
+        elif auth_type == 'LDAP':
             if email:
                 raise ValueError('Users with auth_type=LDAP cannot specify an email address.')
 
-            # TODO: check that the user exists in LDAP and get its email address for later
-            exists_in_ldap = True
-            if not exists_in_ldap:
-                raise ValueError("User does not exists in LDAP.")
+            if not LDAP.check_ids(username=username, password=password):
+                raise ValueError("Invalid identifiers.")
 
-        user = get_user_model()(username=username, auth_type=auth_type, email=email)
-        if auth_type == 'SIMPLE':
-            user.set_password(password)
-        if auth_type == 'LDAP':
-            # Verify the password via ldap
-            # TODO
+            user_info = LDAP.user_info(username=username)
+            user = get_user_model()(
+                username=username,
+                auth_type=auth_type,
+                email=user_info['email'],
+                displayname=user_info['displayname'][:50],
+                firstname=user_info['firstname'][:30],
+                lastname=user_info['lastname'][:30],
+            )
             user.is_active = True
+
         user.save(using=self.db)
         return user
 
@@ -88,6 +109,10 @@ class User(BaseModel, AbstractBaseUser):
     is_active = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
 
+    displayname = models.CharField(max_length=50, blank=True)
+    firstname = models.CharField(max_length=30, blank=True)
+    lastname = models.CharField(max_length=30, blank=True)
+
     AUTH_TYPE_CHOICES = [("SIMPLE", 'Simple'), ('LDAP', 'LDAP')]
     auth_type = models.CharField(max_length=6, choices=AUTH_TYPE_CHOICES)
 
@@ -101,8 +126,7 @@ class User(BaseModel, AbstractBaseUser):
         if self.auth_type == 'SIMPLE':
             return super(User, self).check_password(raw_password)
         if self.auth_type == 'LDAP':
-            # TODO
-            return True
+            return LDAP.check_ids(username=self.username, password=raw_password)
 
     def get_groups(self):
         return Group.objects.filter(members__in=[self])
@@ -110,7 +134,7 @@ class User(BaseModel, AbstractBaseUser):
     def is_admin(self):
         if self.is_superuser:
             return True
-        return self in Group.objects.get(name="admin").members
+        return len(Group.objects.filter(name="admin", members__in=[self])) == 1
 
 
 class Group(BaseModel):
@@ -118,7 +142,7 @@ class Group(BaseModel):
         super().__init__(*args, **kwargs)
 
     name = models.CharField('name', max_length=80, unique=True)
-    members = models.ManyToManyField(User)
+    members = models.ManyToManyField(User, related_name="groups")
     ldap_corresponding_group = models.CharField(max_length=500, blank=True)
     objects = GroupManager()
 
