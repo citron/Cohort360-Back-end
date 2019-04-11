@@ -22,14 +22,11 @@ class UserSerializer(serializers.ModelSerializer):
     firstname = serializers.CharField(max_length=30, required=False)
     lastname = serializers.CharField(max_length=30, required=False)
 
-    groups = serializers.PrimaryKeyRelatedField(many=True, queryset=Group.objects.all(), required=False)
-
     class Meta:
         model = UserModel
         fields = ("uuid", "created_at", "modified_at",
                   "username", "password", "email", "auth_type", "is_active",
-                  "displayname", "firstname", "lastname",
-                  "groups",)
+                  "displayname", "firstname", "lastname",)
 
 
 class UserSerializerCreate(UserSerializer):
@@ -43,7 +40,7 @@ class UserSerializerCreate(UserSerializer):
             if 'username' in str(e):
                 raise serializers.ValidationError("User already exists!", code="user_already_exists")
             if 'email' in str(e):
-                raise serializers.ValidationError("Email already associated to an existing user!",
+                raise serializers.ValidationError("Email already associated with an existing user!",
                                                   code="user_already_exists")
         except Exception as e:
             raise serializers.ValidationError(str(e), code="internal")

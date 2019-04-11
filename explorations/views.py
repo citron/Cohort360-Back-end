@@ -1,7 +1,7 @@
 import coreapi
 import coreschema
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.decorators import list_route, permission_classes, detail_route, api_view
+from rest_framework.decorators import permission_classes, detail_route
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.schemas import AutoSchema
 from rest_framework.views import APIView
 
-from cohort.permissions import IsOwner, IsAdmin, IsShared, OR
+from cohort.permissions import IsAdminOrOwner, IsAdmin, IsShared, OR
 from cohort.views import CustomModelViewSet
 from explorations.models import Exploration, Request, Cohort
 from explorations.serializers import ExplorationSerializer, RequestSerializer, CohortSerializer
@@ -35,9 +35,9 @@ class CohortViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
-            return OR(IsAdmin(), IsOwner())
+            return OR(IsAdminOrOwner())
         elif self.request.method == 'GET':
-            return OR(IsAdmin(), IsOwner(), IsShared())
+            return OR(IsAdminOrOwner(), IsShared())
 
 
 class RequestViewSet(viewsets.ModelViewSet):
@@ -61,12 +61,12 @@ class RequestViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
-            return OR(IsAdmin(), IsOwner())
+            return OR(IsAdminOrOwner())
         elif self.request.method == 'GET':
-            return OR(IsAdmin(), IsOwner(), IsShared())
+            return OR(IsAdminOrOwner(), IsShared())
 
     @detail_route(methods=['get'])
-    @permission_classes((IsOwner,))
+    @permission_classes((IsAdminOrOwner,))
     def execute(self, request, uuid):
         req = Request.objects.get(uuid=uuid)
         # TODO:
@@ -95,9 +95,9 @@ class ExplorationViewSet(CustomModelViewSet):
 
     def get_permissions(self):
         if self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
-            return OR(IsAdmin(), IsOwner())
+            return OR(IsAdminOrOwner())
         elif self.request.method == 'GET':
-            return OR(IsAdmin(), IsOwner(), IsShared())
+            return OR(IsAdminOrOwner(), IsShared())
 
     def create(self, request, *args, **kwargs):
 

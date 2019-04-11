@@ -16,6 +16,8 @@ from cohort_back.settings import COHORT_CONF
 
 
 def is_valid_username(username, auth_type):
+    if not "USERNAME_REGEX" in COHORT_CONF["AUTH_METHODS"][auth_type]:
+        return True
     username_regex = COHORT_CONF["AUTH_METHODS"][auth_type]["USERNAME_REGEX"]
     if username_regex is not None:
         pattern = re.compile(username_regex)
@@ -77,7 +79,8 @@ class UserManager(BaseUserManager):
                 firstname=user_info['firstname'][:30],
                 lastname=user_info['lastname'][:30],
             )
-            user.is_active = True
+        # Todo: only for ldap
+        user.is_active = True
 
         user.save(using=self.db)
         return user

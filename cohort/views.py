@@ -1,5 +1,6 @@
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.decorators import list_route, permission_classes, detail_route
+from rest_framework.decorators import permission_classes, detail_route
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework import viewsets
 from rest_framework.generics import get_object_or_404
@@ -7,7 +8,7 @@ from rest_framework.permissions import NOT, IsAuthenticated
 from rest_framework.response import Response
 
 from cohort.models import User, Group
-from cohort.permissions import IsOwner, IsAdmin, OR
+from cohort.permissions import IsAdminOrOwner, OR, IsAdmin
 from cohort.serializers import UserSerializerCreate, UserSerializerUpdate, GroupSerializer, UserSerializer
 
 
@@ -35,12 +36,12 @@ class UserViewSet(viewsets.ModelViewSet):
 
     lookup_field = 'username'
 
-    def get_queryset(self):
-        user = self.request.user
-        if user.is_admin():
-            return User.objects.all()
-        else:
-            return User.objects.filter(uuid=user.uuid)
+    # def get_queryset(self):
+    #     user = self.request.user
+    #     # if user.is_admin():
+    #     return User.objects.all()
+    #     # else:
+    #     #     return User.objects.filter(uuid=user.uuid)
 
     def get_serializer_class(self):
         serializer_class = self.serializer_class
@@ -52,15 +53,20 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.request.method in ['GET', 'PUT', 'PATCH', 'DELETE']:
-            return OR(IsAdmin(), IsOwner())
+            return OR(IsAdminOrOwner())
         elif self.request.method == 'POST':
             return OR(IsAdmin(), NOT(IsAuthenticated()))
 
     @detail_route(methods=['get'])
-    @permission_classes((IsOwner,))
-    def groups(self, request, *args, **kwargs):
-        Group.objects.filter(name__icontains="adm")
-        serializer = GroupSerializer(Group.objects.filter(members__uuid__exact=request.user.uuid), many=True)
+    @permission_classes((IsAdminOrOwner,))
+    def groups(self, request, username):
+        if request.user.is_admin():
+            u = get_object_or_404(User, username=username)
+        else:
+            if username != request.user.username:
+                raise PermissionDenied()
+            u = request.user
+        serializer = GroupSerializer(u.get_groups(), many=True)
         return Response(serializer.data)
 
 
@@ -81,7 +87,7 @@ class GroupViewSet(viewsets.ModelViewSet):
             return OR(IsAdmin())
 
     @detail_route(methods=['get'])
-    @permission_classes((IsOwner,))
+    @permission_classes((IsAdminOrOwner,))
     def members(self, request, name):
         g = get_object_or_404(Group, name=name)
         serializer = UserSerializer(g.members, many=True)
