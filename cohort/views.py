@@ -1,11 +1,15 @@
+import coreapi
+import coreschema
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.decorators import permission_classes, detail_route
+from rest_framework.decorators import permission_classes, detail_route, action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework import viewsets
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import NOT, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.schemas import AutoSchema
+from rest_framework.views import APIView
 
 from cohort.models import User, Group
 from cohort.permissions import IsAdminOrOwner, OR, IsAdmin
@@ -88,9 +92,26 @@ class GroupViewSet(viewsets.ModelViewSet):
             return OR(IsAdmin())
         return []
 
-    @detail_route(methods=['get'])
-    @permission_classes((IsAdminOrOwner,))
+    @action(methods=['get'], detail=True, permission_classes=(IsAdminOrOwner,))
     def members(self, request, name):
         g = get_object_or_404(Group, name=name)
         serializer = UserSerializer(g.members, many=True)
+        return Response(serializer.data)
+
+    @action(methods=['get'], detail=True, permission_classes=(IsAdminOrOwner,), url_name="add_member",
+            url_path='add/(?P<username>[^/.]+)')
+    def add_member(self, request, name, username):
+        g = get_object_or_404(Group, name=name)
+        g.add_member(get_object_or_404(User, username=username))
+        g.save()
+        serializer = GroupSerializer(g)
+        return Response(serializer.data)
+
+    @action(methods=['get'], detail=True, permission_classes=(IsAdminOrOwner,), url_name="remove_member",
+            url_path='remove/(?P<username>[^/.]+)')
+    def remove_member(self, request, name, username):
+        g = get_object_or_404(Group, name=name)
+        g.del_member(get_object_or_404(User, username=username))
+        g.save()
+        serializer = GroupSerializer(g)
         return Response(serializer.data)

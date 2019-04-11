@@ -178,13 +178,6 @@ class Group(BaseModel):
         if user.auth_type == 'LDAP':
             raise UnsupportedFeatureError()
 
-    def is_member(self, user):
-        try:
-            self.members.get(user=user)
-            return True
-        except ObjectDoesNotExist:
-            return False
-
     def refresh_from_ldap(self):
         # TODO
         mappings = COHORT_CONF["AUTH_METHODS"]["LDAP"]["GROUPS_MAPPING"]

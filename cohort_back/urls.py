@@ -44,4 +44,5 @@ urlpatterns = [
     url(r'^docs/', schema_view),
     url(r'^accounts/', include('rest_framework.urls')),
     url(r'^search/criteria/$', SearchCriteria.as_view(), name="search_criteria"),
+    # url(r'^groups/<str:name>/add/<str:username>$', SearchCriteria.as_view(), name="search_criteria"),
 ]

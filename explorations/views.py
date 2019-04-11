@@ -70,9 +70,9 @@ class RequestViewSet(viewsets.ModelViewSet):
     def execute(self, request, uuid):
         req = Request.objects.get(uuid=uuid)
         # TODO:
-        # Execute query with SolR
+        # Execute query with SolR asynchronously
         result = req.execute_query()
-        return Response({})
+        return Response({'response': 'Launched background task that executes the request on SolR.'})
 
 
 class ExplorationViewSet(CustomModelViewSet):
@@ -85,13 +85,6 @@ class ExplorationViewSet(CustomModelViewSet):
     ordering_fields = ('created_at', 'modified_at', 'name', 'description', 'favorite', 'shared', 'owner_id',)
     ordering = ('name',)
     search_fields = ('$name', '$description',)
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.is_admin():
-            return Exploration.objects.all()
-        else:
-            return Exploration.objects.filter(owner=user)
 
     def get_permissions(self):
         if self.request.method in ['POST', 'PATCH', 'DELETE']:
