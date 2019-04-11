@@ -26,7 +26,7 @@ class CustomModelViewSet(viewsets.ModelViewSet):
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializerCreate
-    http_method_names = ['get', 'post', 'put', 'patch', 'delete']
+    http_method_names = ['get', 'post', 'patch', 'delete']
 
     filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
     filterset_fields = ('username', 'email', 'is_active', 'displayname', 'firstname', 'lastname')
@@ -46,16 +46,17 @@ class UserViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         serializer_class = self.serializer_class
 
-        if self.request and (self.request.method == 'PUT' or self.request.method == 'PATCH'):
+        if self.request and self.request.method == 'PATCH':
             serializer_class = UserSerializerUpdate
 
         return serializer_class
 
     def get_permissions(self):
-        if self.request.method in ['GET', 'PUT', 'PATCH', 'DELETE']:
+        if self.request.method in ['GET', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
         elif self.request.method == 'POST':
             return OR(IsAdmin(), NOT(IsAuthenticated()))
+        return []
 
     @detail_route(methods=['get'])
     @permission_classes((IsAdminOrOwner,))
@@ -73,7 +74,7 @@ class UserViewSet(viewsets.ModelViewSet):
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
-    http_method_names = ['get', 'post', 'put', 'patch', 'delete']
+    http_method_names = ['get', 'post', 'patch', 'delete']
     lookup_field = 'name'
 
     filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
@@ -83,8 +84,9 @@ class GroupViewSet(viewsets.ModelViewSet):
     search_fields = ('$name',)
 
     def get_permissions(self):
-        if self.request.method in ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']:
+        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
             return OR(IsAdmin())
+        return []
 
     @detail_route(methods=['get'])
     @permission_classes((IsAdminOrOwner,))

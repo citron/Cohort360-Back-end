@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.schemas import AutoSchema
 from rest_framework.views import APIView
 
-from cohort.permissions import IsAdminOrOwner, IsAdmin, IsShared, OR
+from cohort.permissions import IsAdminOrOwner, IsShared, OR
 from cohort.views import CustomModelViewSet
 from explorations.models import Exploration, Request, Cohort
 from explorations.serializers import ExplorationSerializer, RequestSerializer, CohortSerializer
@@ -18,7 +18,7 @@ from explorations.serializers import ExplorationSerializer, RequestSerializer, C
 class CohortViewSet(viewsets.ModelViewSet):
     queryset = Cohort.objects.all()
     serializer_class = CohortSerializer
-    http_method_names = ['get', 'post', 'put', 'patch', 'delete']
+    http_method_names = ['get', 'post', 'patch', 'delete']
 
     filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
     filterset_fields = ('name', 'shared', 'request_id', 'group_id')
@@ -34,7 +34,7 @@ class CohortViewSet(viewsets.ModelViewSet):
             return Cohort.objects.filter(request__exploration__owner=user)
 
     def get_permissions(self):
-        if self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+        if self.request.method in ['POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
         elif self.request.method == 'GET':
             return OR(IsAdminOrOwner(), IsShared())
@@ -43,7 +43,7 @@ class CohortViewSet(viewsets.ModelViewSet):
 class RequestViewSet(viewsets.ModelViewSet):
     queryset = Request.objects.all()
     serializer_class = RequestSerializer
-    http_method_names = ['get', 'post', 'put', 'patch', 'delete']
+    http_method_names = ['get', 'post', 'patch', 'delete']
 
     filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
     filterset_fields = ('name', 'shared', 'stats_number_of_patients', 'stats_number_of_documents', 'refresh_every',
@@ -60,7 +60,7 @@ class RequestViewSet(viewsets.ModelViewSet):
             return Request.objects.filter(exploration__owner=user)
 
     def get_permissions(self):
-        if self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+        if self.request.method in ['POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
         elif self.request.method == 'GET':
             return OR(IsAdminOrOwner(), IsShared())
@@ -78,7 +78,7 @@ class RequestViewSet(viewsets.ModelViewSet):
 class ExplorationViewSet(CustomModelViewSet):
     queryset = Exploration.objects.all()
     serializer_class = ExplorationSerializer
-    http_method_names = ['get', 'post', 'put', 'patch', 'delete']
+    http_method_names = ['get', 'post', 'patch', 'delete']
 
     filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
     filterset_fields = ('name', 'favorite', 'shared', 'owner_id',)
@@ -94,7 +94,7 @@ class ExplorationViewSet(CustomModelViewSet):
             return Exploration.objects.filter(owner=user)
 
     def get_permissions(self):
-        if self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+        if self.request.method in ['POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
         elif self.request.method == 'GET':
             return OR(IsAdminOrOwner(), IsShared())

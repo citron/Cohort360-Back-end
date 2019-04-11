@@ -30,6 +30,9 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserSerializerCreate(UserSerializer):
+    class Meta(UserSerializer.Meta):
+        pass
+
     def create(self, validated_data):
         user = None
         try:
@@ -48,6 +51,8 @@ class UserSerializerCreate(UserSerializer):
 
 
 class UserSerializerUpdate(UserSerializer):
+    class Meta(UserSerializer.Meta):
+        pass
 
     def update(self, instance, validated_data):
         if 'username' in validated_data:
@@ -66,6 +71,10 @@ class UserSerializerUpdate(UserSerializer):
 
         if 'password' in validated_data:
             instance.set_password(validated_data['password'])
+
+        instance.displayname = validated_data.get('displayname', instance.displayname)
+        instance.firstname = validated_data.get('firstname', instance.firstname)
+        instance.lastname = validated_data.get('lastname', instance.lastname)
 
         instance.save()
         return instance

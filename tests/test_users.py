@@ -1,22 +1,6 @@
 import requests
 
-
-class Error(Exception):
-    def __init__(self, result, name):
-        self.result = result
-        self.name = name
-
-    def __str__(self):
-        return "Error appended while doing: {}\nStatus code: {}\Error: {}".format(self.name, self.result.status_code,
-                                                                                  self.result.content)
-
-
-def assert_status(result, expected_status_code, name):
-    if result.status_code != expected_status_code:
-        raise Error(result, name)
-
-
-API_URL = "http://127.0.0.1:8002"
+from tests.util import assert_status, assert_value, req
 
 # Create user
 
@@ -32,27 +16,35 @@ user_data = {
 
 
 def clean():
-    tokens = requests.post(API_URL + "/jwt/",
-                           data={"username": user_data['username'], "password": user_data['password']})
+    tokens = req("post", "/jwt/", data={"username": user_data['username'], "password": user_data['password']})
     if tokens.status_code == 400:
         return
-    requests.delete(API_URL + "/users/{}".format(user_data['username']),
-                    headers={'Authorization': 'Bearer ' + tokens.json()['access']})
+    req("delete", "/users/{}".format(user_data['username']), headers={'Authorization': 'Bearer ' + tokens.json()['access']})
 
+
+clean()
 try:
 
-    result = requests.post(API_URL + "/users/", data=user_data)
-    print(result.__dict__)
+    result = req("post", "/users/", data=user_data)
     assert_status(result, 201, "create user")
 
-    result = requests.post(API_URL + "/jwt/",
-                           data={"username": user_data['username'], "password": user_data['password']})
+    result = req("post", "/jwt/", data={"username": user_data['username'], "password": user_data['password']})
     assert_status(result, 200, "get jwt tokens")
+    token = result.json()
 
-    
+    result = req("put", "/users/{}/".format(user_data['username']),
+                 headers={'Authorization': 'Bearer ' + token['access']})
+    assert_status(result, 405, "put user")
 
-    result = requests.delete(API_URL + "/users/{}".format(user_data['username']),
-                    headers={'Authorization': 'Bearer ' + result.json()['access']})
+    result = req("patch", "/users/{}/".format(user_data['username']), data={"firstname": "ezfze"},
+                 headers={'Authorization': 'Bearer ' + token['access']})
+    assert_status(result, 200, "patch user")
+
+    result = req("get", "/users/{}/".format(user_data['username']), headers={'Authorization': 'Bearer ' + token['access']})
+    assert_status(result, 200, "get user")
+    assert_value(result, "check user firstname after patch", firstname="ezfze")
+
+    result = req("delete", "/users/{}/".format(user_data['username']), headers={'Authorization': 'Bearer ' + token['access']})
     assert_status(result, 204, "delete user")
 
 
