@@ -17,11 +17,14 @@ class CohortSerializer(serializers.ModelSerializer):
     group_id = serializers.PrimaryKeyRelatedField(source="group", queryset=Group.objects.all())
     request_id = serializers.PrimaryKeyRelatedField(source="request", queryset=Request.objects.all())
 
+    fhir_patient_id_list = serializers.CharField(required=False)
+
     class Meta:
         model = Cohort
         fields = ("uuid", "created_at", "modified_at",
                   "name", "description", "shared",
-                  "group_id", "request_id",)
+                  "group_id", "request_id",
+                  "fhir_patient_id_list",)
 
 
 class RequestSerializer(serializers.ModelSerializer):
@@ -45,6 +48,8 @@ class RequestSerializer(serializers.ModelSerializer):
     cohorts_ids = serializers.PrimaryKeyRelatedField(source="cohorts", queryset=Cohort.objects.all(), write_only=True,
                                                      required=False)
 
+    serialized_query = serializers.CharField(required=False)
+
     class Meta:
         model = Request
         fields = ("uuid", "created_at", "modified_at",
@@ -53,6 +58,7 @@ class RequestSerializer(serializers.ModelSerializer):
                   "refresh_every", "refresh_new_number_of_patients",
                   "exploration_id",
                   "cohorts", "cohorts_ids",
+                  "serialized_query",
                   )
 
 

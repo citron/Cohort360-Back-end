@@ -14,15 +14,14 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.conf.urls import url
-from django.urls import include
+from django.urls import include, path
 
 from rest_framework import routers
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from rest_framework_swagger.views import get_swagger_view
 
 from cohort.views import UserViewSet, GroupViewSet
-from explorations.views import ExplorationViewSet, RequestViewSet, CohortViewSet
-
+from explorations.views import ExplorationViewSet, RequestViewSet, CohortViewSet, SearchCriteria
 
 # Routers provide an easy way of automatically determining the URL conf.
 router = routers.DefaultRouter()
@@ -44,4 +43,5 @@ urlpatterns = [
     url(r'^jwt/verify/$', TokenVerifyView.as_view(), name='token_verify'),
     url(r'^docs/', schema_view),
     url(r'^accounts/', include('rest_framework.urls')),
+    url(r'^search/criteria/$', SearchCriteria.as_view(), name="search_criteria"),
 ]

@@ -1,6 +1,13 @@
+import coreapi
+import coreschema
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.decorators import list_route, permission_classes, detail_route, api_view
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework import viewsets
+from rest_framework import viewsets, status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.schemas import AutoSchema
+from rest_framework.views import APIView
 
 from cohort.permissions import IsOwner, IsAdmin, IsShared, OR
 from cohort.views import CustomModelViewSet
@@ -58,6 +65,15 @@ class RequestViewSet(viewsets.ModelViewSet):
         elif self.request.method == 'GET':
             return OR(IsAdmin(), IsOwner(), IsShared())
 
+    @detail_route(methods=['get'])
+    @permission_classes((IsOwner,))
+    def execute(self, request, uuid):
+        req = Request.objects.get(uuid=uuid)
+        # TODO:
+        # Execute query with SolR
+        result = req.execute_query()
+        return Response({})
+
 
 class ExplorationViewSet(CustomModelViewSet):
     queryset = Exploration.objects.all()
@@ -91,3 +107,31 @@ class ExplorationViewSet(CustomModelViewSet):
             request.data['owner_id'] = str(user.uuid)
 
         return super(ExplorationViewSet, self).create(request, *args, **kwargs)
+
+
+class SearchCriteria(APIView):
+    """
+    Search criteria based on specified terms.
+    """
+    permission_classes = (IsAuthenticated,)
+
+    schema = AutoSchema(manual_fields=[
+        coreapi.Field(
+            "query",
+            required=True,
+            location="query",
+            schema=coreschema.String()
+        ),
+    ])
+
+    def post(self, request):
+        """
+        Return a list of all users.
+        """
+        if "terms" not in request.data:
+            return Response({"query": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
+        # TODO
+        # Execute query(terms) in SolR
+
+        result = {}
+        return Response(result)

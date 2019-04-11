@@ -46,7 +46,7 @@ class Request(BaseModel):
 
     serialized_query = models.TextField(default="{}")
 
-    def __save__(self, *args, **kwargs):
+    def save(self, *args, **kwargs):
         try:
             json.loads(self.serialized_query)
         except json.decoder.JSONDecodeError as e:
@@ -54,6 +54,7 @@ class Request(BaseModel):
         super(Request, self).save(*args, **kwargs)
 
     def get_cohorts(self):
+        self.save()
         return Cohort.objects.filter(request=self)
 
     def duplicate(self):
@@ -61,6 +62,12 @@ class Request(BaseModel):
         new_self.pk = None
         new_self.save()
         return new_self
+
+    def execute_query(self):
+        # TODO
+        # result = SOLR.send_query(self.serialized_query)
+        # return result
+        pass
 
 
 class Cohort(BaseModel):
@@ -70,3 +77,5 @@ class Cohort(BaseModel):
 
     group = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True)
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='cohorts')
+
+    fhir_patient_id_list = models.TextField(default="")

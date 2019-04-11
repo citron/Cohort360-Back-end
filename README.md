@@ -42,3 +42,34 @@ You will then be able to get a JSON Web Token (JWT) to further authenticate to o
 3. The user can now use its access token to browse other API urls by specifying it in the request authorization header ("Authorization: Bearer \<the-access-token-here\>").
 4. When the access token expires, use the `/api/jwt/refresh` url by specifying the `refresh` token in the request data. This will return a JSON response containing a new access token.
 
+
+## Development
+
+### Medical data
+
+Cohort back-end does not store any medical data.
+It only stores Patient ids for Cohorts.
+
+### Search with SolR
+
+1. Search criteria
+2. Execute requests (query with many organized criteria (and, or, not))
+
+
+### Modification d'un modèle
+
+Il faut créer le fichier de migration associé avec la commande 
+
+```
+python manage.py makemigrations <nom-du-module>
+```
+
+-> ça crée un fichier de migration dans <nom-du-module>/migrations
+
+Puis 
+
+```
+python manage.py migrate
+```
+
+pour l'appliquer en BDD.

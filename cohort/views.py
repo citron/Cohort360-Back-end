@@ -1,8 +1,9 @@
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.decorators import list_route, permission_classes
+from rest_framework.decorators import list_route, permission_classes, detail_route
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework import viewsets
-from rest_framework.permissions import AllowAny, NOT, IsAuthenticated
+from rest_framework.generics import get_object_or_404
+from rest_framework.permissions import NOT, IsAuthenticated
 from rest_framework.response import Response
 
 from cohort.models import User, Group
@@ -27,10 +28,12 @@ class UserViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'put', 'patch', 'delete']
 
     filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
-    filterset_fields = ('username', 'email', 'is_active',)
-    ordering_fields = ('created_at', 'modified_at', 'username', 'email',)
-    ordering = ('username',)
-    search_fields = ('$username', '$email',)
+    filterset_fields = ('username', 'email', 'is_active', 'displayname', 'firstname', 'lastname')
+    ordering_fields = ('created_at', 'modified_at', 'username', 'email', 'displayname', 'firstname', 'lastname')
+    ordering = ('username', 'displayname', 'firstname', 'lastname')
+    search_fields = ('$username', '$email', '$displayname', '$firstname', '$lastname')
+
+    lookup_field = 'username'
 
     def get_queryset(self):
         user = self.request.user
@@ -42,7 +45,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         serializer_class = self.serializer_class
 
-        if self.request.method == 'PUT' or self.request.method == 'PATCH':
+        if self.request and (self.request.method == 'PUT' or self.request.method == 'PATCH'):
             serializer_class = UserSerializerUpdate
 
         return serializer_class
@@ -53,10 +56,11 @@ class UserViewSet(viewsets.ModelViewSet):
         elif self.request.method == 'POST':
             return OR(IsAdmin(), NOT(IsAuthenticated()))
 
-    @list_route(methods=['get'])
+    @detail_route(methods=['get'])
     @permission_classes((IsOwner,))
-    def profile(self, request, *args, **kwargs):
-        serializer = UserSerializer(request.user)
+    def groups(self, request, *args, **kwargs):
+        Group.objects.filter(name__icontains="adm")
+        serializer = GroupSerializer(Group.objects.filter(members__uuid__exact=request.user.uuid), many=True)
         return Response(serializer.data)
 
 
@@ -64,13 +68,21 @@ class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
     http_method_names = ['get', 'post', 'put', 'patch', 'delete']
+    lookup_field = 'name'
 
     filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
     filterset_fields = ('name',)
     ordering_fields = ('created_at', 'modified_at', 'name',)
-    ordering = ('name',)
+    ordering = ('name',)  # by default
     search_fields = ('$name',)
 
     def get_permissions(self):
         if self.request.method in ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']:
             return OR(IsAdmin())
+
+    @detail_route(methods=['get'])
+    @permission_classes((IsOwner,))
+    def members(self, request, name):
+        g = get_object_or_404(Group, name=name)
+        serializer = UserSerializer(g.members, many=True)
+        return Response(serializer.data)

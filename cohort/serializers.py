@@ -18,12 +18,17 @@ class UserSerializer(serializers.ModelSerializer):
     auth_type = serializers.ChoiceField(choices=UserModel.AUTH_TYPE_CHOICES)
     is_active = serializers.BooleanField(read_only=True)
 
+    displayname = serializers.CharField(max_length=50, required=False)
+    firstname = serializers.CharField(max_length=30, required=False)
+    lastname = serializers.CharField(max_length=30, required=False)
+
     groups = serializers.PrimaryKeyRelatedField(many=True, queryset=Group.objects.all(), required=False)
 
     class Meta:
         model = UserModel
         fields = ("uuid", "created_at", "modified_at",
                   "username", "password", "email", "auth_type", "is_active",
+                  "displayname", "firstname", "lastname",
                   "groups",)
 
 
@@ -75,10 +80,9 @@ class GroupSerializer(serializers.ModelSerializer):
     modified_at = serializers.DateTimeField(read_only=True)
 
     name = serializers.CharField(max_length=80)
-    members = serializers.PrimaryKeyRelatedField(many=True, queryset=UserModel.objects.all(), required=False)
     ldap_corresponding_group = serializers.CharField(max_length=500, required=False)
 
     class Meta:
         model = Group
         fields = ("uuid", "created_at", "modified_at",
-                  "name", "members", "ldap_corresponding_group")
+                  "name", "ldap_corresponding_group")
