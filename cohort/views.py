@@ -1,15 +1,11 @@
-import coreapi
-import coreschema
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.decorators import permission_classes, detail_route, action
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework import viewsets
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import NOT, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.schemas import AutoSchema
-from rest_framework.views import APIView
 
 from cohort.models import User, Group
 from cohort.permissions import IsAdminOrOwner, OR, IsAdmin

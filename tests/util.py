@@ -2,7 +2,7 @@ import json
 
 import requests
 
-API_URL = "http://127.0.0.1:8002"
+API_URL = "https://localhost:44455"
 
 
 def debug_curl(url, method, data, headers):

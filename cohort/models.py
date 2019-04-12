@@ -4,7 +4,6 @@ from uuid import uuid4
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, PermissionsMixin, Group as BaseGroup, \
     Permission, GroupManager
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from rest_framework.exceptions import PermissionDenied
 
@@ -132,7 +131,7 @@ class User(BaseModel, AbstractBaseUser):
             return LDAP.check_ids(username=self.username, password=raw_password)
 
     def get_groups(self):
-        return Group.objects.filter(members__in=[self])
+        return Group.objects.filter(members__uuid__exact=self.uuid)
 
     def is_admin(self):
         if self.is_superuser:
