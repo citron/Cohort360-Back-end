@@ -8,3 +8,4 @@ djangorestframework_simplejwt==4.1.0
 zxcvbn-python==4.4.24
 django-rest-swagger==2.2.0
 ldap3==2.6
+django-cors-headers==2.5.2

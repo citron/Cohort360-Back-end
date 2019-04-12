@@ -26,13 +26,6 @@ class CohortViewSet(viewsets.ModelViewSet):
     ordering = ('name',)
     search_fields = ('$name', '$description',)
 
-    def get_queryset(self):
-        user = self.request.user
-        if user.is_admin():
-            return Cohort.objects.all()
-        else:
-            return Cohort.objects.filter(request__exploration__owner=user)
-
     def get_permissions(self):
         if self.request.method in ['POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
@@ -51,13 +44,6 @@ class RequestViewSet(viewsets.ModelViewSet):
     ordering_fields = ('created_at', 'modified_at', 'name',)
     ordering = ('name',)
     search_fields = ('$name', '$description',)
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.is_admin():
-            return Request.objects.all()
-        else:
-            return Request.objects.filter(exploration__owner=user)
 
     def get_permissions(self):
         if self.request.method in ['POST', 'PATCH', 'DELETE']:

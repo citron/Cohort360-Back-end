@@ -62,8 +62,7 @@ class UserViewSet(viewsets.ModelViewSet):
             return OR(IsAdmin(), NOT(IsAuthenticated()))
         return []
 
-    @detail_route(methods=['get'])
-    @permission_classes((IsAdminOrOwner,))
+    @action(methods=['get'], detail=True, permission_classes=(IsAdminOrOwner,))
     def groups(self, request, username):
         if request.user.is_admin():
             u = get_object_or_404(User, username=username)
