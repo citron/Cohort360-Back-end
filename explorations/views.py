@@ -9,10 +9,10 @@ from rest_framework.response import Response
 from rest_framework.schemas import AutoSchema
 from rest_framework.views import APIView
 
-from cohort.permissions import IsAdminOrOwner, IsShared, OR
+from cohort.permissions import IsAdminOrOwner, IsShared, OR, IsAdmin
 from cohort.views import CustomModelViewSet
-from explorations.models import Exploration, Request, Cohort
-from explorations.serializers import ExplorationSerializer, RequestSerializer, CohortSerializer
+from explorations.models import Exploration, Request, Cohort, Perimeter
+from explorations.serializers import ExplorationSerializer, RequestSerializer, CohortSerializer, PerimeterSerializer
 
 
 class CohortViewSet(viewsets.ModelViewSet):
@@ -21,7 +21,7 @@ class CohortViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete']
 
     filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
-    filterset_fields = ('name', 'shared', 'request_id', 'group_id')
+    filterset_fields = ('name', 'shared', 'request_id', 'perimeter_id')
     ordering_fields = ('created_at', 'modified_at', 'name',)
     ordering = ('name',)
     search_fields = ('$name', '$description',)
@@ -86,6 +86,33 @@ class ExplorationViewSet(CustomModelViewSet):
             request.data['owner_id'] = str(user.uuid)
 
         return super(ExplorationViewSet, self).create(request, *args, **kwargs)
+
+
+class PerimeterViewSet(CustomModelViewSet):
+    queryset = Perimeter.objects.all()
+    serializer_class = PerimeterSerializer
+    http_method_names = ['get', 'post', 'patch', 'delete']
+
+    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
+    filterset_fields = ('name', 'data_type', 'owner_id',)
+    ordering_fields = ('created_at', 'modified_at', 'name', 'description', 'data_type', 'owner_id',)
+    ordering = ('name',)
+    search_fields = ('$name', '$description', '$fhir_query')
+
+    def get_permissions(self):
+        if self.request.method in ['POST', 'PATCH', 'DELETE']:
+            return OR(IsAdmin())
+        elif self.request.method == 'GET':
+            return OR(IsAdminOrOwner())
+
+    def create(self, request, *args, **kwargs):
+
+        user = request.user
+
+        if 'owner_id' not in request.data:
+            request.data['owner_id'] = str(user.uuid)
+
+        return super(PerimeterViewSet, self).create(request, *args, **kwargs)
 
 
 class SearchCriteria(APIView):

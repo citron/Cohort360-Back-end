@@ -1,7 +1,27 @@
 import json
 
-from cohort.models import BaseModel, User, Group
+from cohort.models import BaseModel, User
 from django.db import models
+
+
+class Perimeter(BaseModel):
+    """
+    A Perimeter contains either services or groups of patient
+    """
+    name = models.CharField(max_length=30)
+    description = models.TextField(blank=True)
+
+    DATA_TYPE_CHOICES = [
+        ("GROUP", 'FHIR Group'),
+        ('ORG', 'FHIR Organization(s)')
+    ]
+    data_type = models.CharField(max_length=5, choices=DATA_TYPE_CHOICES)
+    fhir_query = models.TextField()
+    # Either:
+    #  1. A Fhir Group : /Group/id
+    #  2. A list of FHIR Organizations : /PractionerRole/me
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='perimeters')
 
 
 class Exploration(BaseModel):
@@ -75,7 +95,8 @@ class Cohort(BaseModel):
     description = models.TextField(blank=True)
     shared = models.BooleanField(default=False)
 
-    group = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True)
-    request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='cohorts')
+    request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='request_cohorts')
 
-    fhir_patient_id_list = models.TextField(default="")
+    perimeter = models.ForeignKey(Perimeter, on_delete=models.CASCADE, related_name='perimeter_cohorts')
+
+    fhir_group_id = models.BigIntegerField()

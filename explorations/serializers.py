@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
-from cohort.models import User, Group
+from cohort.models import User
 from cohort_back.settings import COHORT_CONF
-from explorations.models import Exploration, Request, Cohort
+from explorations.models import Exploration, Request, Cohort, Perimeter
 
 
 class CohortSerializer(serializers.ModelSerializer):
@@ -14,17 +14,17 @@ class CohortSerializer(serializers.ModelSerializer):
     description = serializers.CharField(required=False)
     shared = serializers.BooleanField(required=False)
 
-    group_id = serializers.PrimaryKeyRelatedField(source="group", queryset=Group.objects.all())
     request_id = serializers.PrimaryKeyRelatedField(source="request", queryset=Request.objects.all())
 
-    fhir_patient_id_list = serializers.CharField(required=False)
+    perimeter_id = serializers.PrimaryKeyRelatedField(source="perimeter", queryset=Perimeter.objects.all())
+
+    fhir_group_id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Cohort
         fields = ("uuid", "created_at", "modified_at",
                   "name", "description", "shared",
-                  "group_id", "request_id",
-                  "fhir_patient_id_list",)
+                  "request_id", "perimeter_id", "fhir_group_id",)
 
 
 class RequestSerializer(serializers.ModelSerializer):
@@ -84,4 +84,26 @@ class ExplorationSerializer(serializers.ModelSerializer):
                   "name", "description", "favorite", "shared",
                   "owner_id",
                   "requests", "requests_ids",
+                  )
+
+
+class PerimeterSerializer(serializers.ModelSerializer):
+    uuid = serializers.UUIDField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    modified_at = serializers.DateTimeField(read_only=True)
+
+    name = serializers.CharField(max_length=30)
+    description = serializers.CharField(required=False)
+
+    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all())
+
+    data_type = serializers.CharField()
+    fhir_query = serializers.CharField()
+
+    class Meta:
+        model = Exploration
+        fields = ("uuid", "created_at", "modified_at",
+                  "name", "description",
+                  "owner_id",
+                  "data_type", "fhir_query",
                   )

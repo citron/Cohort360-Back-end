@@ -1,23 +1,17 @@
-from django.conf import settings
-from django.contrib.auth.hashers import check_password
-from django.contrib.auth.models import User
+from cohort.auth import IDServer
+from cohort.models import get_or_create_user, User
 
 
 class AuthBackend:
-    def authenticate(self, request, username, password, method):
-        login_valid = (settings.ADMIN_LOGIN == username)
-        pwd_valid = check_password(password, settings.ADMIN_PASSWORD)
-        if login_valid and pwd_valid:
-            try:
-                user = User.objects.get(username=username)
-            except User.DoesNotExist:
-                # Create a new user. There's no need to set a password
-                # because only the password from settings.py is checked.
-                user = User(username=username)
-                user.is_staff = True
-                user.is_superuser = True
-                user.save()
-            return user
+    def authenticate(self, request, username, password):
+        try:
+            tokens = IDServer.check_ids(username=username, password=password)
+        except ValueError:
+            return None
+        try:
+            return User.objects.get(username=username)
+        except User.DoesNotExist:
+            return get_or_create_user(jwt_access_token=tokens['access'])
         return None
 
     def get_user(self, user_id):

@@ -20,13 +20,13 @@ from rest_framework import routers
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from rest_framework_swagger.views import get_swagger_view
 
-from cohort.views import UserViewSet, GroupViewSet
-from explorations.views import ExplorationViewSet, RequestViewSet, CohortViewSet, SearchCriteria
+from cohort.views import UserViewSet
+from explorations.views import ExplorationViewSet, RequestViewSet, CohortViewSet, SearchCriteria, PerimeterViewSet
 
 # Routers provide an easy way of automatically determining the URL conf.
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet)
-router.register(r'groups', GroupViewSet)
+router.register(r'perimeters', PerimeterViewSet)
 router.register(r'explorations', ExplorationViewSet)
 router.register(r'requests', RequestViewSet)
 router.register(r'cohorts', CohortViewSet)

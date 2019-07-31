@@ -3,15 +3,13 @@
     "model": "cohort.user",
     "pk": "9312efd0-06eb-4068-9132-bef3f1ea5aec",
     "fields": {
-      "password": "pbkdf2_sha256$120000$XS0b6SRVVJ23$VC97rOLgu2YTM6myMiEhmzqnnidM3cYf9IZjJyCLGqo=",
       "last_login": null,
       "created_at": "2019-04-03T18:47:23.557Z",
       "modified_at": "2019-04-03T18:47:23.575Z",
       "username": "admin",
       "email": "admin@cohort360.fr",
       "is_active": true,
-      "is_superuser": true,
-      "auth_type": "SIMPLE"
+      "is_superuser": true
     }
   },
   {
