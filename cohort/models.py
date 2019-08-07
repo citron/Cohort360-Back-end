@@ -62,3 +62,26 @@ class User(BaseModel, AbstractBaseUser):
 
     def is_admin(self):
         return self.is_superuser
+
+
+class Perimeter(BaseModel):
+    """
+    A Perimeter contains either services or groups of patient
+    """
+    name = models.CharField(max_length=30)
+    description = models.TextField(blank=True)
+
+    PERIMETER_DATA_TYPE_CHOICES = [
+        ("GROUP", 'FHIR Group'),
+        ('ORG', 'FHIR Organization(s)')
+    ]
+    data_type = models.CharField(max_length=5, choices=PERIMETER_DATA_TYPE_CHOICES)
+    fhir_query = models.TextField()
+    # Either:
+    #  1. A Fhir Group : /Group/id
+    #  2. A list of FHIR Organizations : /PractionerRole/me
+
+    access_nominative = models.BooleanField()
+    access_pseudo_anonymised = models.BooleanField()
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='perimeters')

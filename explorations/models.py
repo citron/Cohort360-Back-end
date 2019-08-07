@@ -1,69 +1,46 @@
 import json
 
-from cohort.models import BaseModel, User
+from cohort.models import BaseModel, User, Perimeter
 from django.db import models
-
-
-class Perimeter(BaseModel):
-    """
-    A Perimeter contains either services or groups of patient
-    """
-    name = models.CharField(max_length=30)
-    description = models.TextField(blank=True)
-
-    DATA_TYPE_CHOICES = [
-        ("GROUP", 'FHIR Group'),
-        ('ORG', 'FHIR Organization(s)')
-    ]
-    data_type = models.CharField(max_length=5, choices=DATA_TYPE_CHOICES)
-    fhir_query = models.TextField()
-    # Either:
-    #  1. A Fhir Group : /Group/id
-    #  2. A list of FHIR Organizations : /PractionerRole/me
-
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='perimeters')
 
 
 class Exploration(BaseModel):
     """
     An Exploration can contain multiple Requests.
     """
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_explorations')
+
     name = models.CharField(max_length=30)
     description = models.TextField(blank=True)
     favorite = models.BooleanField(default=False)
-    shared = models.BooleanField(default=False)
-
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='explorations')
 
     def get_requests(self):
         return Request.objects.filter(exploration=self)
 
 
 class Request(BaseModel):
-    """
-    A Request is made of many organized criteria.
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_requests')
 
-    A Request can be used to generate a Cohort.
-    Once a Request has been used to generate a Cohort, you cannot edit its criteria.
-    If you want to, you must duplicate this Request and edit the new one.
-
-    Once a Request has been used to generate a Cohort, it can be used to generate
-    a new updated Cohort (with a different number of patients).
-
-    refresh_new_number_of_patients will be automatically refreshed if refresh_every > 0 (in seconds)
-    """
     name = models.CharField(max_length=30)
     description = models.TextField(blank=True)
-    shared = models.BooleanField(default=False)
+    favorite = models.BooleanField(default=False)
 
     exploration = models.ForeignKey(Exploration, on_delete=models.CASCADE, related_name='requests')
 
-    stats_number_of_patients = models.BigIntegerField(default=0)
-    stats_number_of_documents = models.BigIntegerField(default=0)
+    REQUEST_DATA_TYPE_CHOICES = [
+        ("PATIENT", 'FHIR Patient'),
+        ('ENCOUNTER', 'FHIR Encounter')
+    ]
+    data_type_of_query = models.CharField(max_length=9, choices=REQUEST_DATA_TYPE_CHOICES)
 
-    refresh_every = models.BigIntegerField(default=0)
-    refresh_new_number_of_patients = models.BigIntegerField(default=0)
+    def last_request_snapshot(self):
+        return RequestQuerySnapshot.objects.filter(request__uuid=self.uuid).latest('created_at')
 
+
+class RequestQuerySnapshot(BaseModel):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_request_query_snapshots')
+
+    request = models.ForeignKey(Request, on_delete=models.CASCADE)
     serialized_query = models.TextField(default="{}")
 
     def save(self, *args, **kwargs):
@@ -71,11 +48,18 @@ class Request(BaseModel):
             json.loads(self.serialized_query)
         except json.decoder.JSONDecodeError as e:
             raise ValueError('value_v1 is not a valid JSON ' + str(e))
-        super(Request, self).save(*args, **kwargs)
+        super(RequestQuerySnapshot, self).save(*args, **kwargs)
 
-    def get_cohorts(self):
-        self.save()
-        return Cohort.objects.filter(request=self)
+    def generate_result(self, perimeter):
+        # TODO : generates a new RequestResult
+        # result = SOLR.send_query(self.serialized_query)
+        rqr = RequestQueryResult()
+        rqr.request_query_history = self
+        rqr.request = self.request
+        rqr.perimeter = perimeter
+        rqr.result_size = 42
+        rqr.save()
+        return rqr
 
     def duplicate(self):
         new_self = self
@@ -83,20 +67,48 @@ class Request(BaseModel):
         new_self.save()
         return new_self
 
-    def execute_query(self):
-        # TODO
-        # result = SOLR.send_query(self.serialized_query)
-        # return result
-        pass
+    def generate_cohort(self, name, description, perimeter):
+        # TODO: launch a background process to generate a Fhir Group from this SolR request
+        #       We must re-execute the query for that!
+        c = Cohort()
+        c.name = name
+        c.description = description
+        c.request_query_snapshot = self
+        c.request = self.request
+        c.perimeter = perimeter
+        c.fhir_group_id = 42
+        c.save()
+        return c
+
+
+class RequestQueryResult(BaseModel):
+    """
+    This is an intermediary result before generating a Cohort/Group in Fhir.
+    """
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_request_query_results')
+
+    request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE)
+    request = models.ForeignKey(Request, on_delete=models.CASCADE)
+    perimeter = models.ForeignKey(Perimeter, on_delete=models.CASCADE)
+
+    result_size = models.BigIntegerField()  # Number of results as returned by SolR
+
+    refresh_every_seconds = models.BigIntegerField(default=0)
+    refresh_create_cohort = models.BooleanField(default=False)
+
+    def refresh(self):
+        return self.request_query_snapshot.generate_result(self.perimeter)
 
 
 class Cohort(BaseModel):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_cohorts')
+
     name = models.CharField(max_length=30)
     description = models.TextField(blank=True)
-    shared = models.BooleanField(default=False)
+    favorite = models.BooleanField(default=False)
 
+    request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE)
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='request_cohorts')
-
     perimeter = models.ForeignKey(Perimeter, on_delete=models.CASCADE, related_name='perimeter_cohorts')
 
     fhir_group_id = models.BigIntegerField()

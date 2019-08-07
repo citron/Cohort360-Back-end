@@ -11,11 +11,8 @@ https://docs.djangoproject.com/en/2.1/ref/settings/
 """
 
 import os
-import ssl
-from datetime import timedelta
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
-from ldap3 import Server, IP_V4_PREFERRED, ROUND_ROBIN, ServerPool, Tls, NTLM, RESTARTABLE, Connection, SUBTREE
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -66,7 +63,6 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'cohort.AuthMiddleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -148,29 +144,19 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'cohort.AuthMiddleware.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
     'PAGE_SIZE': 10,
 }
 
-JWT_SERVER_URL = "https://jwt-auth.eds.aphp.fr/"
+JWT_SERVER_URL = "https://url/"
+JWT_SIGNING_KEY = None
+JWT_ALGORITHM = "HS256"
 
 SWAGGER_SETTINGS = {
     "LOGOUT_URL": "/accounts/logout",
 }
 
-COHORT_CONF = {
-    "AUTH_METHODS": {
-        "SIMPLE": {
-        },
-        "LDAP": {
-            "USERNAME_REGEX": "user[2-9].*"
-        }
-    },
-    "REFRESH_REQUESTS": {
-        "MIN_DELAY_SEC": 60 * 60 * 2  # Every two hours
-    }
-}
-
+APPEND_SLASH = True

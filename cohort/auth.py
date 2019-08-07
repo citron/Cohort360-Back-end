@@ -1,6 +1,7 @@
+import jwt
 from requests import post
 
-from cohort_back.settings import JWT_SERVER_URL
+from cohort_back.settings import JWT_SERVER_URL, JWT_SIGNING_KEY, JWT_ALGORITHM
 
 
 class IDServer:
@@ -20,5 +21,13 @@ class IDServer:
 
     @classmethod
     def verify_jwt(cls, access_token):
-        resp = post("{}/jwt/verify/".format(JWT_SERVER_URL), data={"token": access_token})
-        return resp.status_code == 200
+        if JWT_SIGNING_KEY is not None:
+            try:
+                return jwt.decode(access_token, JWT_SIGNING_KEY, leeway=15, algorithm=JWT_ALGORITHM)
+            except jwt.exceptions.InvalidSignatureError:
+                pass
+        else:
+            resp = post("{}/jwt/verify/".format(JWT_SERVER_URL), data={"token": access_token})
+            if resp.status_code == 200:
+                return jwt.decode(access_token, verify=False, verify_exp=True, leeway=15, algorithm=JWT_ALGORITHM)
+        raise ValueError("Invalid JWT Access Token")

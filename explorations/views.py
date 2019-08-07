@@ -1,82 +1,132 @@
 import coreapi
 import coreschema
-from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.decorators import permission_classes, detail_route
-from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework import viewsets, status
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.schemas import AutoSchema
 from rest_framework.views import APIView
 
-from cohort.permissions import IsAdminOrOwner, IsShared, OR, IsAdmin
-from cohort.views import CustomModelViewSet
-from explorations.models import Exploration, Request, Cohort, Perimeter
-from explorations.serializers import ExplorationSerializer, RequestSerializer, CohortSerializer, PerimeterSerializer
+from cohort.models import Perimeter
+from cohort.permissions import IsAdminOrOwner, OR, IsAdmin
+from cohort.views import UserObjectsRestrictedViewSet
+from explorations.models import Exploration, Request, Cohort, RequestQuerySnapshot, RequestQueryResult
+from explorations.serializers import ExplorationSerializer, RequestSerializer, CohortSerializer, \
+    RequestQuerySnapshotSerializer, RequestQueryResultSerializer, PerimeterSerializer
 
 
-class CohortViewSet(viewsets.ModelViewSet):
+# Filtering/Ordering/Searching : https://www.django-rest-framework.org/api-guide/filtering/
+#
+# filterset_fields = ('category', 'in_stock',) -> /api/products?category=clothing&in_stock=True
+# ordering_fields = ('username',) -> /api/users?ordering=username
+# ordering = ('name',) -> This is the default ordering
+# search_fields = ('user',) -> /api/users?search=russell
+
+
+class CohortViewSet(UserObjectsRestrictedViewSet):
     queryset = Cohort.objects.all()
     serializer_class = CohortSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
 
-    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
-    filterset_fields = ('name', 'shared', 'request_id', 'perimeter_id')
-    ordering_fields = ('created_at', 'modified_at', 'name',)
-    ordering = ('name',)
+    filterset_fields = ('uuid', 'name', 'favorite',
+                        'request_query_snapshot_id',
+                        'request_id', 'perimeter_id', 'fhir_group_id')
+    ordering_fields = ('created_at', 'modified_at',
+                       'name', 'favorite',)
+    ordering = ('-created_at',)
     search_fields = ('$name', '$description',)
 
     def get_permissions(self):
-        if self.request.method in ['POST', 'PATCH', 'DELETE']:
+        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
-        elif self.request.method == 'GET':
-            return OR(IsAdminOrOwner(), IsShared())
 
 
-class RequestViewSet(viewsets.ModelViewSet):
+class RequestQueryResultViewSet(UserObjectsRestrictedViewSet):
+    queryset = RequestQueryResult.objects.all()
+    serializer_class = RequestQueryResultSerializer
+    http_method_names = ['get', 'post', 'patch', 'delete']
+
+    filterset_fields = ('uuid',
+                        'request_query_snapshot_id', 'request_id', 'perimeter_id',
+                        'refresh_every_seconds', 'refresh_create_cohort')
+    ordering_fields = ('created_at', 'modified_at',
+                       'result_size', 'refresh_every_seconds')
+    ordering = ('-created_at',)
+    search_fields = []
+
+
+class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
+    queryset = RequestQuerySnapshot.objects.all()
+    serializer_class = RequestQuerySnapshotSerializer
+    http_method_names = ['get', 'post', 'patch', 'delete']
+
+    filterset_fields = ('uuid', 'request_id',)
+    ordering_fields = ('created_at', 'modified_at',)
+    ordering = ('-created_at',)
+    search_fields = ('$serialized_query',)
+
+    def get_permissions(self):
+        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
+            return OR(IsAdminOrOwner())
+
+    @detail_route(methods=['get'])
+    @permission_classes((IsAdminOrOwner,))
+    def generate_result(self, request_query_snapshot_uuid, perimeter_uuid):
+        try:
+            rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
+            p = Perimeter.objects.get(uuid=perimeter_uuid)
+        except (RequestQuerySnapshot.DoesNotExist, Perimeter.DoesNotExist):
+            return Response({"response": "request_query_snapshot or perimeter not found"},
+                            status=status.HTTP_404_NOT_FOUND)
+        rqr = rqs.generate_result(perimeter=p)
+        return Response({'response': "Query successful!", 'data': RequestQueryResultSerializer(rqr).data},
+                        status=status.HTTP_200_OK)
+
+    @detail_route(methods=['get'])
+    @permission_classes((IsAdminOrOwner,))
+    def generate_cohort(self, request_query_snapshot_uuid, perimeter_uuid, name, description):
+        try:
+            rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
+            p = Perimeter.objects.get(uuid=perimeter_uuid)
+        except (RequestQuerySnapshot.DoesNotExist, Perimeter.DoesNotExist):
+            return Response({"response": "request_query_snapshot or perimeter not found"},
+                            status=status.HTTP_404_NOT_FOUND)
+        c = rqs.generate_cohort(name, description, perimeter=p)
+        return Response({'response': "Query successful!", 'data': CohortSerializer(c).data},
+                        status=status.HTTP_200_OK)
+
+
+class RequestViewSet(UserObjectsRestrictedViewSet):
     queryset = Request.objects.all()
     serializer_class = RequestSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
 
-    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
-    filterset_fields = ('name', 'shared', 'stats_number_of_patients', 'stats_number_of_documents', 'refresh_every',
-                        'refresh_new_number_of_patients', 'exploration_id',)
-    ordering_fields = ('created_at', 'modified_at', 'name',)
+    filterset_fields = ('uuid', 'name', 'favorite',
+                        'exploration_id', 'data_type_of_query',)
+    ordering_fields = ('created_at', 'modified_at',
+                       'name', 'favorite', 'data_type_of_query')
     ordering = ('name',)
     search_fields = ('$name', '$description',)
 
     def get_permissions(self):
-        if self.request.method in ['POST', 'PATCH', 'DELETE']:
+        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
-        elif self.request.method == 'GET':
-            return OR(IsAdminOrOwner(), IsShared())
-
-    @detail_route(methods=['get'])
-    @permission_classes((IsAdminOrOwner,))
-    def execute(self, request, uuid):
-        req = Request.objects.get(uuid=uuid)
-        # TODO:
-        # Execute query with SolR asynchronously
-        result = req.execute_query()
-        return Response({'response': 'Launched background task that executes the request on SolR.'})
 
 
-class ExplorationViewSet(CustomModelViewSet):
+class ExplorationViewSet(UserObjectsRestrictedViewSet):
     queryset = Exploration.objects.all()
     serializer_class = ExplorationSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
 
-    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
-    filterset_fields = ('name', 'favorite', 'shared', 'owner_id',)
-    ordering_fields = ('created_at', 'modified_at', 'name', 'description', 'favorite', 'shared', 'owner_id',)
+    filterset_fields = ('uuid', 'name', 'favorite', 'owner_id',)
+    ordering_fields = ('created_at', 'modified_at',
+                       'name', 'description', 'favorite', 'owner_id',)
     ordering = ('name',)
     search_fields = ('$name', '$description',)
 
     def get_permissions(self):
-        if self.request.method in ['POST', 'PATCH', 'DELETE']:
+        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
-        elif self.request.method == 'GET':
-            return OR(IsAdminOrOwner(), IsShared())
 
     def create(self, request, *args, **kwargs):
 
@@ -88,14 +138,14 @@ class ExplorationViewSet(CustomModelViewSet):
         return super(ExplorationViewSet, self).create(request, *args, **kwargs)
 
 
-class PerimeterViewSet(CustomModelViewSet):
+class PerimeterViewSet(UserObjectsRestrictedViewSet):
     queryset = Perimeter.objects.all()
     serializer_class = PerimeterSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
 
-    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,)
-    filterset_fields = ('name', 'data_type', 'owner_id',)
-    ordering_fields = ('created_at', 'modified_at', 'name', 'description', 'data_type', 'owner_id',)
+    filterset_fields = ('uuid', 'name', 'data_type', 'owner_id',)
+    ordering_fields = ('created_at', 'modified_at',
+                       'name', 'description', 'data_type', 'owner_id',)
     ordering = ('name',)
     search_fields = ('$name', '$description', '$fhir_query')
 
@@ -113,6 +163,7 @@ class PerimeterViewSet(CustomModelViewSet):
             request.data['owner_id'] = str(user.uuid)
 
         return super(PerimeterViewSet, self).create(request, *args, **kwargs)
+
 
 
 class SearchCriteria(APIView):
