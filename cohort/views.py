@@ -4,7 +4,7 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 
 from cohort.models import User
 from cohort.permissions import IsAdminOrOwner, OR, IsAdmin
-from cohort.serializers import UserSerializerCreate
+from cohort.serializers import UserSerializer
 
 
 class BaseViewSet(viewsets.ModelViewSet):
@@ -22,8 +22,8 @@ class UserObjectsRestrictedViewSet(BaseViewSet):
 
 class UserViewSet(UserObjectsRestrictedViewSet):
     queryset = User.objects.all()
-    serializer_class = UserSerializerCreate
-    http_method_names = ['get', 'post', 'patch', 'delete']
+    serializer_class = UserSerializer
+    http_method_names = ['get', 'delete']
 
     filterset_fields = ('username', 'email', 'is_active', 'displayname', 'firstname', 'lastname')
     ordering_fields = ('created_at', 'modified_at', 'username', 'email', 'displayname', 'firstname', 'lastname')

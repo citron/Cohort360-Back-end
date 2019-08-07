@@ -156,7 +156,7 @@ JWT_SIGNING_KEY = None
 JWT_ALGORITHM = "HS256"
 
 SWAGGER_SETTINGS = {
-    "LOGOUT_URL": "/accounts/logout",
+    "LOGOUT_URL": "/accounts/logout/",
 }
 
-APPEND_SLASH = True
+APPEND_SLASH = False

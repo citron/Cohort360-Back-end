@@ -40,26 +40,26 @@ class UserSerializer(BaseSerializer):
                   "username", "password", "email", "is_active",
                   "displayname", "firstname", "lastname",)
 
-
-class UserSerializerCreate(UserSerializer):
-    class Meta(UserSerializer.Meta):
-        pass
-
-    def create(self, validated_data):
-        user = None
-        try:
-            user = UserManager().create_simple_user(**validated_data)
-        except ValueError as ve:
-            raise serializers.ValidationError(str(ve), code="value_error")
-        except IntegrityError as e:
-            if 'username' in str(e):
-                raise serializers.ValidationError("User already exists!", code="user_already_exists")
-            if 'email' in str(e):
-                raise serializers.ValidationError("Email already associated with an existing user!",
-                                                  code="user_already_exists")
-        except Exception as e:
-            raise serializers.ValidationError(str(e), code="internal")
-        return user
+#
+# class UserSerializerCreate(UserSerializer):
+#     class Meta(UserSerializer.Meta):
+#         pass
+#
+#     def create(self, validated_data):
+#         user = None
+#         try:
+#             user = UserManager().create_simple_user(**validated_data)
+#         except ValueError as ve:
+#             raise serializers.ValidationError(str(ve), code="value_error")
+#         except IntegrityError as e:
+#             if 'username' in str(e):
+#                 raise serializers.ValidationError("User already exists!", code="user_already_exists")
+#             if 'email' in str(e):
+#                 raise serializers.ValidationError("Email already associated with an existing user!",
+#                                                   code="user_already_exists")
+#         except Exception as e:
+#             raise serializers.ValidationError(str(e), code="internal")
+#         return user
 
 
 #
