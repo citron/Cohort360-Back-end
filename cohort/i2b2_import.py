@@ -1,6 +1,13 @@
+from random import randint
+
+from django.http import HttpResponse
+
 from cohort.models import Perimeter
 from explorations.models import Exploration, Request, RequestQuerySnapshot, RequestQueryResult, Cohort
 from requests import get
+
+
+lorem_ipsum = "There are many variations of passages of Lorem Ipsum available, but the majority have suffered alteration in some form, by injected humour, or randomised words which don't look even slightly believable. If you are going to use a passage of Lorem Ipsum, you need to be sure there isn't anything embarrassing hidden in the middle of text. All the Lorem Ipsum generators on the Internet tend to repeat predefined chunks as necessary, making this the first true generator on the Internet. It uses a dictionary of over 200 Latin words, combined with a handful of model sentence structures, to generate Lorem Ipsum which looks reasonable. The generated Lorem Ipsum is therefore always free from repetition, injected humour, or non-characteristic words etc."
 
 def import_cohorts_from_i2b2(user, jwt_access_token):
     p1 = Perimeter()
@@ -49,34 +56,49 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
     e.owner = user
     e.save()
 
-    resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managingEntity=me", headers={"Authorization": jwt_access_token})
+    resp = get("https://fhir-r4-dev.eds.aphp.fr/Practitioner?_format=json&identifier={}".format(user.username),
+               headers={"Authorization": jwt_access_token})
+
+    if resp.status_code != 200 or not 'entry' in resp.json() or len(resp.json()['entry']) != 1:
+        raise HttpResponse(status=500)
+
+    id_fhir = resp.json()['entry'][0]['resource']['id']
+
+    resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managingEntity={}".format(id_fhir),
+               headers={"Authorization": jwt_access_token})
+
     if resp.status_code == 200:
+
+        if len(resp.json()['entry']) < 1:
+            resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managingEntity=23".format(id_fhir),
+                       headers={"Authorization": jwt_access_token})
+
         for group in resp.json()['entry']:
             r = Request()
-            r.name = "Test"
-            r.description = "Test"
+            r.name = group['resource']['name']
+            r.description = lorem_ipsum[randint(0, int(len(lorem_ipsum)/2)):randint(int(len(lorem_ipsum)/2), len(lorem_ipsum))]
             r.exploration = e
             r.data_type_of_query = "PATIENT"
             r.save()
 
             rqs = RequestQuerySnapshot()
             rqs.request = r
-            rqs.serialized_query = ""
+            rqs.serialized_query = "{}"
             rqs.save()
 
             rqr = RequestQueryResult()
             rqr.request_query_snapshot = rqs
             rqr.request = r
             rqr.perimeter = p1
-            rqr.result_size = 50
+            rqr.result_size = group['resource']['quantity']
             rqr.save()
 
             c = Cohort()
-            c.name = "Cohorte"
-            c.description = "Cohorte descr"
+            c.name = group['resource']['name']
+            c.description = lorem_ipsum[randint(0, int(len(lorem_ipsum)/2)):randint(int(len(lorem_ipsum)/2), len(lorem_ipsum))]
             c.request_query_result = rqr
             c.request_query_snapshot = rqs
             c.request = r
             c.perimeter = p1
-            c.fhir_group_id = 75
+            c.fhir_group_id = group['resource']['id']
             c.save()
