@@ -64,17 +64,18 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
 
     id_fhir = resp.json()['entry'][0]['resource']['id']
 
-    resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managingEntity={}".format(id_fhir),
+    resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managing-entity={}".format(id_fhir),
                headers={"Authorization": jwt_access_token})
 
     if resp.status_code == 200:
 
-        if len(resp.json()['entry']) < 1:
-            resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managingEntity=23".format(id_fhir),
+        if not 'entry' in resp.json() or len(resp.json()['entry']) < 1:
+            resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managing-entity=23".format(id_fhir),
                        headers={"Authorization": jwt_access_token})
 
         for group in resp.json()['entry']:
             r = Request()
+            r.owner = user
             r.name = group['resource']['name']
             r.description = lorem_ipsum[randint(0, int(len(lorem_ipsum)/2)):randint(int(len(lorem_ipsum)/2), len(lorem_ipsum))]
             r.exploration = e
@@ -82,11 +83,13 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             r.save()
 
             rqs = RequestQuerySnapshot()
+            rqs.owner = user
             rqs.request = r
             rqs.serialized_query = "{}"
             rqs.save()
 
             rqr = RequestQueryResult()
+            rqr.owner = user
             rqr.request_query_snapshot = rqs
             rqr.request = r
             rqr.perimeter = p1
@@ -94,6 +97,7 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             rqr.save()
 
             c = Cohort()
+            c.owner = user
             c.name = group['resource']['name']
             c.description = lorem_ipsum[randint(0, int(len(lorem_ipsum)/2)):randint(int(len(lorem_ipsum)/2), len(lorem_ipsum))]
             c.request_query_result = rqr
