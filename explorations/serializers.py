@@ -62,17 +62,12 @@ class RequestSerializer(BaseSerializer):
 
     data_type_of_query = serializers.ChoiceField(Request.REQUEST_DATA_TYPE_CHOICES)
 
-    cohorts = CohortSerializer(many=True, read_only=True)
-    cohorts_ids = serializers.PrimaryKeyRelatedField(source="cohorts", queryset=Cohort.objects.all(), write_only=True,
-                                                     required=False)
-
     class Meta:
         model = Request
         fields = ("uuid", "created_at", "modified_at",
                   "name", "description", "favorite",
                   "exploration_id",
-                  "data_type_of_query",
-                  "cohorts", "cohorts_ids",)
+                  "data_type_of_query",)
 
 
 class ExplorationSerializer(BaseSerializer):
@@ -82,16 +77,11 @@ class ExplorationSerializer(BaseSerializer):
 
     owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all())
 
-    requests = RequestSerializer(many=True, read_only=True)
-    requests_ids = serializers.PrimaryKeyRelatedField(source="requests", queryset=Request.objects.all(),
-                                                      write_only=True, required=False)
-
     class Meta:
         model = Exploration
         fields = ("uuid", "created_at", "modified_at",
                   "name", "description", "favorite",
-                  "owner_id",
-                  "requests", "requests_ids",)
+                  "owner_id",)
 
 
 class PerimeterSerializer(BaseSerializer):
