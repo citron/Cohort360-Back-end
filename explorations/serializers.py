@@ -18,7 +18,7 @@ class CohortSerializer(BaseSerializer):
 
     class Meta:
         model = Cohort
-        fields = ("created_at", "modified_at",
+        fields = ("uuid", "created_at", "modified_at",
                   "name", "description", 'favorite',
                   "request_query_snapshot_id", "request_id", "perimeter_id",
                   "fhir_group_id",)
@@ -37,7 +37,7 @@ class RequestQueryResultSerializer(BaseSerializer):
 
     class Meta:
         model = RequestQueryResult
-        fields = ("created_at", "modified_at",
+        fields = ("uuid", "created_at", "modified_at",
                   "request_query_snapshot_id", "request_id", "perimeter_id",
                   "result_size",
                   "refresh_every_seconds", "refresh_create_cohort",)
@@ -49,7 +49,7 @@ class RequestQuerySnapshotSerializer(BaseSerializer):
 
     class Meta:
         model = RequestQuerySnapshot
-        fields = ("created_at", "modified_at",
+        fields = ("uuid", "created_at", "modified_at",
                   "request_id", "serialized_query",)
 
 
@@ -68,7 +68,7 @@ class RequestSerializer(BaseSerializer):
 
     class Meta:
         model = Request
-        fields = ("created_at", "modified_at",
+        fields = ("uuid", "created_at", "modified_at",
                   "name", "description", "favorite",
                   "exploration_id",
                   "data_type_of_query",
@@ -88,7 +88,7 @@ class ExplorationSerializer(BaseSerializer):
 
     class Meta:
         model = Exploration
-        fields = ("created_at", "modified_at",
+        fields = ("uuid", "created_at", "modified_at",
                   "name", "description", "favorite",
                   "owner_id",
                   "requests", "requests_ids",)
@@ -105,7 +105,7 @@ class PerimeterSerializer(BaseSerializer):
 
     class Meta:
         model = Perimeter
-        fields = ("created_at", "modified_at",
+        fields = ("uuid", "created_at", "modified_at",
                   "name", "description",
                   "owner_id",
                   "data_type", "fhir_query",)
