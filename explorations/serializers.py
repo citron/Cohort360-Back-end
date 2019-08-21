@@ -16,12 +16,15 @@ class CohortSerializer(BaseSerializer):
 
     fhir_group_id = serializers.IntegerField(read_only=True)
 
+    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
+
     class Meta:
         model = Cohort
         fields = ("uuid", "created_at", "modified_at",
                   "name", "description", 'favorite',
                   "request_query_snapshot_id", "request_id", "perimeter_id",
-                  "fhir_group_id",)
+                  "fhir_group_id",
+                  "owner_id",)
 
 
 class RequestQueryResultSerializer(BaseSerializer):
@@ -35,22 +38,28 @@ class RequestQueryResultSerializer(BaseSerializer):
     refresh_every_seconds = serializers.IntegerField(required=False)
     refresh_create_cohort = serializers.BooleanField(required=False)
 
+    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
+
     class Meta:
         model = RequestQueryResult
         fields = ("uuid", "created_at", "modified_at",
                   "request_query_snapshot_id", "request_id", "perimeter_id",
                   "result_size",
-                  "refresh_every_seconds", "refresh_create_cohort",)
+                  "refresh_every_seconds", "refresh_create_cohort",
+                  "owner_id",)
 
 
 class RequestQuerySnapshotSerializer(BaseSerializer):
     request_id = serializers.PrimaryKeyRelatedField(source='request', queryset=Request.objects.all())
     serialized_query = serializers.CharField(required=False)
 
+    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
+
     class Meta:
         model = RequestQuerySnapshot
         fields = ("uuid", "created_at", "modified_at",
-                  "request_id", "serialized_query",)
+                  "request_id", "serialized_query",
+                  "owner_id",)
 
 
 class RequestSerializer(BaseSerializer):
@@ -62,12 +71,15 @@ class RequestSerializer(BaseSerializer):
 
     data_type_of_query = serializers.ChoiceField(Request.REQUEST_DATA_TYPE_CHOICES)
 
+    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
+
     class Meta:
         model = Request
         fields = ("uuid", "created_at", "modified_at",
                   "name", "description", "favorite",
                   "exploration_id",
-                  "data_type_of_query",)
+                  "data_type_of_query",
+                  "owner_id",)
 
 
 class ExplorationSerializer(BaseSerializer):
