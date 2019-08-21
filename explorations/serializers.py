@@ -75,7 +75,7 @@ class ExplorationSerializer(BaseSerializer):
     description = serializers.CharField(required=False)
     favorite = serializers.BooleanField(required=False)
 
-    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all())
+    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
 
     class Meta:
         model = Exploration

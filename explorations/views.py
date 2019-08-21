@@ -40,6 +40,15 @@ class CohortViewSet(UserObjectsRestrictedViewSet):
         if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
 
+    def create(self, request, *args, **kwargs):
+
+        user = request.user
+
+        if 'owner_id' not in request.data:
+            request.data['owner_id'] = str(user.uuid)
+
+        return super(CohortViewSet, self).create(request, *args, **kwargs)
+
 
 class RequestQueryResultViewSet(UserObjectsRestrictedViewSet):
     queryset = RequestQueryResult.objects.all()
@@ -53,6 +62,15 @@ class RequestQueryResultViewSet(UserObjectsRestrictedViewSet):
                        'result_size', 'refresh_every_seconds')
     ordering = ('-created_at',)
     search_fields = []
+
+    def create(self, request, *args, **kwargs):
+
+        user = request.user
+
+        if 'owner_id' not in request.data:
+            request.data['owner_id'] = str(user.uuid)
+
+        return super(RequestQueryResultViewSet, self).create(request, *args, **kwargs)
 
 
 class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
@@ -68,6 +86,15 @@ class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
     def get_permissions(self):
         if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
+
+    def create(self, request, *args, **kwargs):
+
+        user = request.user
+
+        if 'owner_id' not in request.data:
+            request.data['owner_id'] = str(user.uuid)
+
+        return super(RequestQuerySnapshotViewSet, self).create(request, *args, **kwargs)
 
     @detail_route(methods=['get'])
     @permission_classes((IsAdminOrOwner,))
@@ -111,6 +138,15 @@ class RequestViewSet(UserObjectsRestrictedViewSet):
     def get_permissions(self):
         if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
+
+    def create(self, request, *args, **kwargs):
+
+        user = request.user
+
+        if 'owner_id' not in request.data:
+            request.data['owner_id'] = str(user.uuid)
+
+        return super(RequestViewSet, self).create(request, *args, **kwargs)
 
 
 class ExplorationViewSet(UserObjectsRestrictedViewSet):
