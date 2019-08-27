@@ -7,6 +7,7 @@ from rest_framework_simplejwt.authentication import AUTH_HEADER_TYPE_BYTES
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 
 from cohort.auth import IDServer
+from cohort.i2b2_import import import_cohorts_from_i2b2
 from cohort.models import User, get_or_create_user
 
 
@@ -28,6 +29,7 @@ class AuthenticationMiddleware(MiddlewareMixin):
                 request.user = User.objects.get(username=payload['username'])
             except User.DoesNotExist:
                 request.user = get_or_create_user(jwt_access_token=jwt_access_token)
+                import_cohorts_from_i2b2(request.user, jwt_access_token=jwt_access_token)
             return
         return HttpResponseForbidden('<h1>403 Forbidden</h1>', content_type='text/html')
 
