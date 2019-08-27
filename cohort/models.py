@@ -5,17 +5,20 @@ from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, Permis
 from django.db import models
 
 from cohort.auth import IDServer
+from cohort.i2b2_import import import_cohorts_from_i2b2
 
 
 def get_or_create_user(jwt_access_token):
     user_info = IDServer.user_info(jwt_access_token=jwt_access_token)
-    return UserManager().create_simple_user(
+    user = UserManager().create_simple_user(
         username=user_info['username'],
         email=user_info['email'],
         displayname=user_info['displayname'][:50],
         firstname=user_info['firstname'][:30],
         lastname=user_info['lastname'][:30],
     )
+    import_cohorts_from_i2b2(user, jwt_access_token=jwt_access_token)
+    return user
 
 
 class UserManager(BaseUserManager):
