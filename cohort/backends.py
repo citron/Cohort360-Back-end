@@ -1,4 +1,5 @@
 from cohort.auth import IDServer
+from cohort.i2b2_import import import_cohorts_from_i2b2
 from cohort.models import get_or_create_user, User
 
 
@@ -12,6 +13,7 @@ class AuthBackend:
             return User.objects.get(username=username)
         except User.DoesNotExist:
             user = get_or_create_user(jwt_access_token=tokens['access'])
+            import_cohorts_from_i2b2(user, jwt_access_token=tokens['access'])
             return user
 
     def get_user(self, user_id):

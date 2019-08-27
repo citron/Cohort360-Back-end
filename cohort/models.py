@@ -5,7 +5,6 @@ from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, Permis
 from django.db import models
 
 from cohort.auth import IDServer
-from cohort.i2b2_import import import_cohorts_from_i2b2
 
 
 def get_or_create_user(jwt_access_token):
@@ -17,7 +16,6 @@ def get_or_create_user(jwt_access_token):
         firstname=user_info['firstname'][:30],
         lastname=user_info['lastname'][:30],
     )
-    import_cohorts_from_i2b2(user, jwt_access_token=jwt_access_token)
     return user
 
 
