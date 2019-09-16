@@ -17,7 +17,6 @@ from django.conf.urls import url
 from django.urls import include
 
 from rest_framework import routers
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from rest_framework_swagger.views import get_swagger_view
 
 from cohort.views import UserViewSet
@@ -42,9 +41,6 @@ internal_urls = [
 
 urlpatterns = [
     url(r'^', include(router.urls)),
-    # url(r'^jwt/$', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    # url(r'^jwt/refresh/$', TokenRefreshView.as_view(), name='token_refresh'),
-    # url(r'^jwt/verify/$', TokenVerifyView.as_view(), name='token_verify'),
     url(r'^docs/', schema_view),
     url(r'^accounts/', include('rest_framework.urls')),
     url(r'^search/criteria/$', SearchCriteria.as_view(), name="search_criteria"),

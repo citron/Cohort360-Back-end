@@ -83,7 +83,8 @@ class RequestQuerySnapshot(BaseModel):
 
 class RequestQueryResult(BaseModel):
     """
-    This is an intermediary result before generating a Cohort/Group in Fhir.
+    This is an intermediary result giving only limited info before
+    possibly generating a Cohort/Group in Fhir.
     """
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_request_query_results')
 

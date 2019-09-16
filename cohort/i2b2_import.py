@@ -6,8 +6,8 @@ from cohort.models import Perimeter
 from explorations.models import Exploration, Request, RequestQuerySnapshot, RequestQueryResult, Cohort
 from requests import get
 
-
 lorem_ipsum = "There are many variations of passages of Lorem Ipsum available, but the majority have suffered alteration in some form, by injected humour, or randomised words which don't look even slightly believable. If you are going to use a passage of Lorem Ipsum, you need to be sure there isn't anything embarrassing hidden in the middle of text. All the Lorem Ipsum generators on the Internet tend to repeat predefined chunks as necessary, making this the first true generator on the Internet. It uses a dictionary of over 200 Latin words, combined with a handful of model sentence structures, to generate Lorem Ipsum which looks reasonable. The generated Lorem Ipsum is therefore always free from repetition, injected humour, or non-characteristic words etc."
+
 
 def import_cohorts_from_i2b2(user, jwt_access_token):
     p1 = Perimeter()
@@ -61,23 +61,25 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
 
     if resp.status_code != 200 or not 'entry' in resp.json() or len(resp.json()['entry']) != 1:
         raise HttpResponse(status=500)
+    #
+    # id_fhir = resp.json()['entry'][0]['resource']['id']
+    #
+    # resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managing-entity={}".format(id_fhir),
+    #            headers={"Authorization": jwt_access_token})
 
-    id_fhir = resp.json()['entry'][0]['resource']['id']
+    # if resp.status_code == 200:
 
-    resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managing-entity={}".format(id_fhir),
-               headers={"Authorization": jwt_access_token})
+    # if not 'entry' in resp.json() or len(resp.json()['entry']) < 1:
+    resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?_id=21415,21417,21420,21359,21367,21369,21371,21373,21375,"
+               "21894,21896,21650,21535,21537", headers={"Authorization": jwt_access_token})
 
     if resp.status_code == 200:
-
-        if not 'entry' in resp.json() or len(resp.json()['entry']) < 1:
-            resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managing-entity=23".format(id_fhir),
-                       headers={"Authorization": jwt_access_token})
-
         for group in resp.json()['entry']:
             r = Request()
             r.owner = user
             r.name = group['resource']['name']
-            r.description = lorem_ipsum[randint(0, int(len(lorem_ipsum)/2)):randint(int(len(lorem_ipsum)/2), len(lorem_ipsum))]
+            r.description = lorem_ipsum[
+                            randint(0, int(len(lorem_ipsum) / 2)):randint(int(len(lorem_ipsum) / 2), len(lorem_ipsum))]
             r.exploration = e
             r.data_type_of_query = "PATIENT"
             r.save()
@@ -92,6 +94,7 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             rqr.owner = user
             rqr.request_query_snapshot = rqs
             rqr.request = r
+            rqr.request = r
             rqr.perimeter = p1
             rqr.result_size = group['resource']['quantity']
             rqr.save()
@@ -99,7 +102,8 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             c = Cohort()
             c.owner = user
             c.name = group['resource']['name']
-            c.description = lorem_ipsum[randint(0, int(len(lorem_ipsum)/2)):randint(int(len(lorem_ipsum)/2), len(lorem_ipsum))]
+            c.description = lorem_ipsum[
+                            randint(0, int(len(lorem_ipsum) / 2)):randint(int(len(lorem_ipsum) / 2), len(lorem_ipsum))]
             c.request_query_result = rqr
             c.request_query_snapshot = rqs
             c.request = r
