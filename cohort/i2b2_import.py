@@ -56,11 +56,11 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
     e.owner = user
     e.save()
 
-    resp = get("https://fhir-r4-dev.eds.aphp.fr/Practitioner?_format=json&identifier={}".format(user.username),
-               headers={"Authorization": jwt_access_token})
-
-    if resp.status_code != 200 or not 'entry' in resp.json() or len(resp.json()['entry']) != 1:
-        raise HttpResponse(status=500)
+    # resp = get("https://fhir-r4-dev.eds.aphp.fr/Practitioner?_format=json&identifier={}".format(user.username),
+    #            headers={"Authorization": jwt_access_token})
+    #
+    # if resp.status_code != 200 or not 'entry' in resp.json() or len(resp.json()['entry']) != 1:
+    #     raise HttpResponse(status=500)
     #
     # id_fhir = resp.json()['entry'][0]['resource']['id']
     #
