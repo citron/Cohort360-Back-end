@@ -14,7 +14,7 @@ class CohortSerializer(BaseSerializer):
     request_id = serializers.PrimaryKeyRelatedField(source='request', queryset=Request.objects.all())
     perimeter_id = serializers.PrimaryKeyRelatedField(source='perimeter', queryset=Perimeter.objects.all())
 
-    fhir_group_id = serializers.IntegerField(read_only=True)
+    fhir_groups_ids = serializers.CharField(read_only=True)
 
     owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
 
@@ -23,7 +23,7 @@ class CohortSerializer(BaseSerializer):
         fields = ("uuid", "created_at", "modified_at",
                   "name", "description", 'favorite',
                   "request_query_snapshot_id", "request_id", "perimeter_id",
-                  "fhir_group_id",
+                  "fhir_groups_ids",
                   "owner_id",)
 
 

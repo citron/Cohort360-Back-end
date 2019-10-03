@@ -30,7 +30,7 @@ class CohortViewSet(UserObjectsRestrictedViewSet):
 
     filterset_fields = ('uuid', 'name', 'favorite',
                         'request_query_snapshot_id',
-                        'request_id', 'perimeter_id', 'fhir_group_id')
+                        'request_id', 'perimeter_id', 'fhir_groups_ids')
     ordering_fields = ('created_at', 'modified_at',
                        'name', 'favorite',)
     ordering = ('-created_at',)

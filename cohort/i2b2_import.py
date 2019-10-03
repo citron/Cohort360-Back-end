@@ -1,7 +1,5 @@
 from random import randint
 
-from django.http import HttpResponse
-
 from cohort.models import Perimeter
 from explorations.models import Exploration, Request, RequestQuerySnapshot, RequestQueryResult, Cohort
 from requests import get
@@ -108,5 +106,5 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             c.request_query_snapshot = rqs
             c.request = r
             c.perimeter = p1
-            c.fhir_group_id = group['resource']['id']
+            c.fhir_groups_ids = str(int(group['resource']['id']))
             c.save()

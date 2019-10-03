@@ -1,5 +1,7 @@
 import json
 
+from django.core.validators import validate_comma_separated_integer_list
+
 from cohort.models import BaseModel, User, Perimeter
 from django.db import models
 
@@ -76,7 +78,7 @@ class RequestQuerySnapshot(BaseModel):
         c.request_query_snapshot = self
         c.request = self.request
         c.perimeter = perimeter
-        c.fhir_group_id = 42
+        c.fhir_groups_ids = "42"
         c.save()
         return c
 
@@ -112,4 +114,10 @@ class Cohort(BaseModel):
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='request_cohorts')
     perimeter = models.ForeignKey(Perimeter, on_delete=models.CASCADE, related_name='perimeter_cohorts')
 
-    fhir_group_id = models.BigIntegerField()
+    fhir_groups_ids = models.TextField(validators=[validate_comma_separated_integer_list])
+
+    COHORT_TYPE_CHOICES = [
+        ("IMPORT_I2B2", "Imported from i2b2.",),
+        ("MY_PATIENTS", "Patients that passed by my services.",)
+    ]
+    type = models.CharField(max_length=20, choices=COHORT_TYPE_CHOICES)
