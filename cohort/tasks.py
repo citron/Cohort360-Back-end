@@ -108,7 +108,7 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
         c.request = r
         c.perimeter = p1
         c.fhir_groups_ids = fhir_group['id']
-        c.created_at = datetime.strptime(date_string=fhir_group['extension'][0]['valueDate'], format="%Y-%m-%d")
+        c.created_at = datetime.strptime(fhir_group['extension'][0]['valueDate'], "%Y-%m-%d")
         c.type = cohort_type
         c.result_size = fhir_group['quantity']
         c.save()
