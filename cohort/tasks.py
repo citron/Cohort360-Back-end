@@ -62,7 +62,7 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
     e.description = "Import des cohortes générées dans i2b2."
     e.owner = user
     e.save()
-    logger.info("Type of jwt_access_token: {}".format(str(type(jwt_access_token))))
+    logger.error("Type of jwt_access_token: {}".format(str(type(jwt_access_token))))
     chart_models = get(OMOP_COMPUTE_API_URL + "/chart_model/",
                        headers={"Authorization": "Bearer " + jwt_access_token}).json()['results']
 
