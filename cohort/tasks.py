@@ -111,7 +111,8 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
         c.request = r
         c.perimeter = p1
         c.fhir_groups_ids = fhir_group['id']
-        c.created_at = datetime.strptime(fhir_group['extension'][0]['valueDate'], "%Y-%m-%d")
+        if 'extension' in fhir_group:
+            c.created_at = datetime.strptime(fhir_group['extension'][0]['valueDate'], "%Y-%m-%d")
         c.type = cohort_type
         c.result_size = fhir_group['quantity']
         c.save()
@@ -126,7 +127,7 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
                 logger.error('Error while sending a post request to the charting API, '
                              'response contains: {}'.format(str(respp.__dict__)))
 
-    resp = get("https://fhir-r4-dev.eds.aphp.fr/Practitioner?_format=json&identifier={}".format(user.username),
+    resp = get("https://fhir-r4-qual.eds.aphp.fr/Practitioner?_format=json&identifier={}".format(user.username),
                headers={"Authorization": jwt_access_token})
 
     if resp.status_code != 200 or 'entry' not in resp.json() or len(resp.json()['entry']) != 1 \
@@ -135,7 +136,7 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
 
     id_fhir = resp.json()['entry'][0]['resource']['id']
 
-    resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managing-entity={}".format(id_fhir),
+    resp = get("https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity={}".format(id_fhir),
                headers={"Authorization": jwt_access_token})
 
     if resp.status_code == 200:
@@ -144,7 +145,7 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             for fhir_group in data['entry']:
                 create_cohort(fhir_group['resource'], cohort_type="IMPORT_I2B2")
 
-    resp = get("https://fhir-r4-dev.eds.aphp.fr/PractitionerRole?practitioner=={}".format(id_fhir),
+    resp = get("https://fhir-r4-qual.eds.aphp.fr/PractitionerRole?practitioner=={}".format(id_fhir),
                headers={"Authorization": jwt_access_token})
 
     org_ids = []
@@ -154,7 +155,7 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             org_ids = [role['resource']['organization']['reference'].split('/')[1] for role in data['entry'] if
                        'organization' in role]
 
-    resp = get("https://fhir-r4-dev.eds.aphp.fr/Group?managing-entity=Organization/{}".format(','.join(org_ids)),
+    resp = get("https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity=Organization/{}".format(','.join(org_ids)),
                headers={"Authorization": jwt_access_token})
 
     if resp.status_code == 200:
