@@ -155,20 +155,21 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
         if 'entry' in data:
             logger.error("Got {} results for {}!".format(len(data['entry']), url))
             org_ids = [role['resource']['organization']['reference'].split('/')[1] for role in data['entry'] if
-                       'organization' in role]
+                       'organization' in role['resource']]
 
-    url = "https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity=Organization/{}".format(','.join(org_ids))
-    resp = get(url, headers={"Authorization": jwt_access_token})
+    if len(org_ids) > 0:
 
-    if resp.status_code == 200:
-        data = resp.json()
-        if 'entry' in data:
-            logger.error("Got {} results for {}!".format(len(data['entry']), url))
-            for fhir_group in data['entry']:
-                create_cohort(fhir_group['resource'], cohort_type="MY_ORGANIZATIONS")
+        url = "https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity=Organization/{}".format(','.join(org_ids))
+        resp = get(url, headers={"Authorization": jwt_access_token})
 
-            # Cohort my patients
-            if len(org_ids) > 0:
+        if resp.status_code == 200:
+            data = resp.json()
+            if 'entry' in data:
+                logger.error("Got {} results for {}!".format(len(data['entry']), url))
+                for fhir_group in data['entry']:
+                    create_cohort(fhir_group['resource'], cohort_type="MY_ORGANIZATIONS")
+
+                # Cohort my patients
                 fhir_group = {}
                 fhir_group['id'] = ','.join([str(e) for e in org_ids])
                 fhir_group['name'] = "Mes patients"
