@@ -73,3 +73,17 @@ python manage.py migrate
 ```
 
 pour l'appliquer en BDD.
+
+
+First launch celery: 
+
+```bash
+celery worker -A omopcomputeapi --loglevel=info
+```
+
+
+Then launch the API:
+
+```bash
+python manage.py runserver
+```

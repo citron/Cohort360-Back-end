@@ -1,3 +1,5 @@
+from celery import shared_task, current_app
+
 from datetime import datetime
 from random import randint
 
@@ -63,17 +65,15 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
 
     def create_cohort(fhir_group, cohort_type):
         # If this cohort already exists, do not create it again
-        try:
-            if cohort_type == 'MY_PATIENTS':
-                c = Cohort.objects.filter(owner=user, type='MY_PATIENTS')
-                c.delete()
-            elif cohort_type in ['IMPORT_I2B2', 'MY_ORGANIZATIONS']:
-                Cohort.objects.filter(owner=user, name=fhir_group['name'],
-                                      fhir_groups_ids=str(int(fhir_group['id'])))
+        if cohort_type == 'MY_PATIENTS':
+            c = Cohort.objects.filter(owner=user, type='MY_PATIENTS').count()
+            if c == 1:
+                Cohort.objects.get(owner=user, type='MY_PATIENTS').delete()
+        elif cohort_type in ['IMPORT_I2B2', 'MY_ORGANIZATIONS']:
+            c = Cohort.objects.filter(owner=user, name=fhir_group['name'],
+                                      fhir_groups_ids=str(int(fhir_group['id']))).count()
+            if c == 1:
                 return
-        except Cohort.DoesNotExist:
-            pass
-
         r = Request()
         r.owner = user
         r.name = fhir_group['name']
@@ -164,3 +164,17 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             fhir_group['name'] = "Mes patients"
             fhir_group['quantity'] = sum([e['resource']['quantity'] for e in data['entry']])
             create_cohort(fhir_group, cohort_type="MY_PATIENTS")
+
+
+@staticmethod
+@shared_task
+def import_cohorts_from_i2b2_background(user, jwt_access_token):
+    import_cohorts_from_i2b2(user, jwt_access_token)
+
+
+def import_i2b2_if_needed_else_background(user, jwt_access_token):
+    count = Cohort.objects.filter(owner=user).count()
+    if count == 0:
+        import_cohorts_from_i2b2(user, jwt_access_token)
+    else:
+        current_app.send_task('charting.tasks.run_ccs', (user, jwt_access_token,))

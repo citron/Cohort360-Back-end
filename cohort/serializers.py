@@ -1,7 +1,6 @@
-from django.db import IntegrityError
 from rest_framework import serializers
 
-from cohort.models import UserManager, User, Perimeter
+from cohort.models import User
 
 
 class BaseSerializer(serializers.ModelSerializer):

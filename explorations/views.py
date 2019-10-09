@@ -30,9 +30,9 @@ class CohortViewSet(UserObjectsRestrictedViewSet):
 
     filterset_fields = ('uuid', 'name', 'favorite',
                         'request_query_snapshot_id',
-                        'request_id', 'perimeter_id', 'fhir_groups_ids')
+                        'request_id', 'perimeter_id', 'fhir_groups_ids', 'type')
     ordering_fields = ('created_at', 'modified_at',
-                       'name', 'favorite',)
+                       'name', 'favorite', 'type', 'result_size')
     ordering = ('-created_at',)
     search_fields = ('$name', '$description',)
 

@@ -5,6 +5,8 @@ from django.core.validators import validate_comma_separated_integer_list
 from cohort.models import BaseModel, User, Perimeter
 from django.db import models
 
+from cohort_back.settings import OMOP_COMPUTE_API_URL
+
 
 class Exploration(BaseModel):
     """
@@ -118,6 +120,9 @@ class Cohort(BaseModel):
 
     COHORT_TYPE_CHOICES = [
         ("IMPORT_I2B2", "Imported from i2b2.",),
-        ("MY_PATIENTS", "Patients that passed by my services.",)
+        ("MY_ORGANIZATIONS", "Organizations in which I work.",),
+        ("MY_PATIENTS", "Patients that passed by all my organizations.")
     ]
     type = models.CharField(max_length=20, choices=COHORT_TYPE_CHOICES)
+
+    result_size = models.BigIntegerField()  # Number of results as returned by SolR
