@@ -49,7 +49,8 @@ class CustomAuthentication(BaseAuthentication):
         except ValueError:
             return HttpResponseUnauthorized('<h1>401 Invalid or expired JWT token</h1>', content_type='text/html')
         try:
-            return User.objects.get(username=payload['username']), raw_token
+            u = User.objects.get(username=payload['username'])
+            return u, raw_token
         except User.DoesNotExist:
             user = get_or_create_user(jwt_access_token=raw_token)
             import_i2b2_if_needed_else_background(user, jwt_access_token=raw_token)

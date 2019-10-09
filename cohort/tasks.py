@@ -15,6 +15,7 @@ from requests import get, post
 lorem_ipsum = "There are many variations of passages of Lorem Ipsum available, but the majority have suffered alteration in some form, by injected humour, or randomised words which don't look even slightly believable. If you are going to use a passage of Lorem Ipsum, you need to be sure there isn't anything embarrassing hidden in the middle of text. All the Lorem Ipsum generators on the Internet tend to repeat predefined chunks as necessary, making this the first true generator on the Internet. It uses a dictionary of over 200 Latin words, combined with a handful of model sentence structures, to generate Lorem Ipsum which looks reasonable. The generated Lorem Ipsum is therefore always free from repetition, injected humour, or non-characteristic words etc."
 logger = logging.getLogger(__name__)
 
+
 def import_cohorts_from_i2b2(user, jwt_access_token):
     p1 = Perimeter()
     p1.name = "Équipe de soin"
@@ -61,7 +62,7 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
     e.description = "Import des cohortes générées dans i2b2."
     e.owner = user
     e.save()
-
+    logger.info("Type of jwt_access_token: {}".format(str(type(jwt_access_token))))
     chart_models = get(OMOP_COMPUTE_API_URL + "/chart_model/",
                        headers={"Authorization": "Bearer " + jwt_access_token}).json()['results']
 
@@ -124,7 +125,6 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             if respp.status_code != 201:
                 logger.error('Error while sending a post request to the charting API, '
                              'response contains: {}'.format(str(respp.__dict__)))
-
 
     resp = get("https://fhir-r4-dev.eds.aphp.fr/Practitioner?_format=json&identifier={}".format(user.username),
                headers={"Authorization": jwt_access_token})
