@@ -56,7 +56,6 @@ class CustomAuthentication(BaseAuthentication):
             import_i2b2_if_needed_else_background(user, jwt_access_token=raw_token)
             return user, raw_token
 
-
     def get_header(self, request):
         """
         Extracts the header containing the JSON web token from the given

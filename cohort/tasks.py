@@ -188,4 +188,4 @@ def import_i2b2_if_needed_else_background(user, jwt_access_token):
     if count == 0:
         import_cohorts_from_i2b2(user, jwt_access_token)
     else:
-        current_app.send_task('charting.tasks.run_ccs', (user, jwt_access_token,))
+        current_app.send_task('cohort.tasks.import_cohorts_from_i2b2_background', (user, jwt_access_token,))
