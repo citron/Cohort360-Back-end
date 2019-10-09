@@ -136,31 +136,35 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
 
     id_fhir = resp.json()['entry'][0]['resource']['id']
 
-    resp = get("https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity={}".format(id_fhir),
-               headers={"Authorization": jwt_access_token})
+    url = "https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity={}".format(id_fhir)
+    resp = get(url, headers={"Authorization": jwt_access_token})
+
 
     if resp.status_code == 200:
         data = resp.json()
         if 'entry' in data:
+            logger.info("Got {} results for {}!".format(len(data['entry']), url))
             for fhir_group in data['entry']:
                 create_cohort(fhir_group['resource'], cohort_type="IMPORT_I2B2")
 
-    resp = get("https://fhir-r4-qual.eds.aphp.fr/PractitionerRole?practitioner=={}".format(id_fhir),
-               headers={"Authorization": jwt_access_token})
+    url = "https://fhir-r4-qual.eds.aphp.fr/PractitionerRole?practitioner=={}".format(id_fhir)
+    resp = get(url, headers={"Authorization": jwt_access_token})
 
     org_ids = []
     if resp.status_code == 200:
         data = resp.json()
         if 'entry' in data:
+            logger.info("Got {} results for {}!".format(len(data['entry']), url))
             org_ids = [role['resource']['organization']['reference'].split('/')[1] for role in data['entry'] if
                        'organization' in role]
 
-    resp = get("https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity=Organization/{}".format(','.join(org_ids)),
-               headers={"Authorization": jwt_access_token})
+    url = "https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity=Organization/{}".format(','.join(org_ids))
+    resp = get(url, headers={"Authorization": jwt_access_token})
 
     if resp.status_code == 200:
         data = resp.json()
         if 'entry' in data:
+            logger.info("Got {} results for {}!".format(len(data['entry']), url))
             for fhir_group in data['entry']:
                 create_cohort(fhir_group['resource'], cohort_type="MY_ORGANIZATIONS")
 
