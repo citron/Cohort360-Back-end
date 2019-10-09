@@ -147,7 +147,7 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             for fhir_group in data['entry']:
                 create_cohort(fhir_group['resource'], cohort_type="IMPORT_I2B2")
 
-    url = "https://fhir-r4-qual.eds.aphp.fr/PractitionerRole?practitioner=={}".format(id_fhir)
+    url = "https://fhir-r4-qual.eds.aphp.fr/PractitionerRole?practitioner={}".format(id_fhir)
     resp = get(url, headers={"Authorization": jwt_access_token})
 
     org_ids = []
