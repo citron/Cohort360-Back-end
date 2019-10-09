@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from django.http import HttpResponseForbidden, HttpResponse
 from django.utils.translation import ugettext_lazy as _
 from django.utils.deprecation import MiddlewareMixin
@@ -27,7 +28,7 @@ class AuthenticationMiddleware(MiddlewareMixin):
                 return HttpResponseUnauthorized('<h1>401 Invalid or expired JWT token</h1>', content_type='text/html')
             try:
                 request.user = User.objects.get(username=payload['username'])
-            except User.DoesNotExist:
+            except ObjectDoesNotExist:
                 request.user = get_or_create_user(jwt_access_token=jwt_access_token)
                 import_i2b2_if_needed_else_background(request.user, jwt_access_token=jwt_access_token)
             return
@@ -44,6 +45,9 @@ class CustomAuthentication(BaseAuthentication):
         if raw_token is None:
             return None
 
+        if type(raw_token) == bytes:
+            raw_token = raw_token.decode('utf-8')
+
         try:
             payload = IDServer.verify_jwt(raw_token)
         except ValueError:
@@ -51,7 +55,7 @@ class CustomAuthentication(BaseAuthentication):
         try:
             u = User.objects.get(username=payload['username'])
             return u, raw_token
-        except User.DoesNotExist:
+        except ObjectDoesNotExist:
             user = get_or_create_user(jwt_access_token=raw_token)
             import_i2b2_if_needed_else_background(user, jwt_access_token=raw_token)
             return user, raw_token
