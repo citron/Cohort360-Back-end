@@ -127,15 +127,18 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
                 logger.error('Error while sending a post request to the charting API, '
                              'response contains: {}'.format(str(respp.__dict__)))
 
-    resp = get("https://fhir-r4-qual.eds.aphp.fr/Practitioner?_format=json&identifier={}".format(user.username),
-               headers={"Authorization": jwt_access_token})
+    url = "https://fhir-r4-qual.eds.aphp.fr/Practitioner?_format=json&identifier={}".format(user.username)
+    resp = get(url, headers={"Authorization": jwt_access_token})
 
     if resp.status_code != 200 or 'entry' not in resp.json() or len(resp.json()['entry']) != 1 \
             or str(resp.json()['entry'][0]['resource']['identifier'][0]['value']) != user.username:
+        logger.error('Error while sending a get request to the FHIR API ({}), '
+                     'response contains: {}'.format(url, str(resp.__dict__)))
         raise HttpResponse(status=500)
 
     id_fhir = resp.json()['entry'][0]['resource']['id']
 
+    # Create I2B2 cohorts
     url = "https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity={}".format(id_fhir)
     resp = get(url, headers={"Authorization": jwt_access_token})
 
@@ -145,7 +148,12 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             logger.error("Got {} results for {}!".format(len(data['entry']), url))
             for fhir_group in data['entry']:
                 create_cohort(fhir_group['resource'], cohort_type="IMPORT_I2B2")
+    else:
+        logger.error('Error while sending a get request to the FHIR API ({}), '
+                     'response contains: {}'.format(url, str(resp.__dict__)))
+        raise HttpResponse(status=500)
 
+    # Create Org cohorts
     url = "https://fhir-r4-qual.eds.aphp.fr/PractitionerRole?practitioner={}".format(id_fhir)
     resp = get(url, headers={"Authorization": jwt_access_token})
 
@@ -156,6 +164,10 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
             logger.error("Got {} results for {}!".format(len(data['entry']), url))
             org_ids = [role['resource']['organization']['reference'].split('/')[1] for role in data['entry'] if
                        'organization' in role['resource']]
+    else:
+        logger.error('Error while sending a get request to the FHIR API ({}), '
+                     'response contains: {}'.format(url, str(resp.__dict__)))
+        raise HttpResponse(status=500)
 
     if len(org_ids) > 0:
 
@@ -169,14 +181,20 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
                 for fhir_group in data['entry']:
                     create_cohort(fhir_group['resource'], cohort_type="MY_ORGANIZATIONS")
 
-                fhir_groups_ids = [e['id'] for e in data['entry']]
+                fhir_groups_ids = [e['resource']['id'] for e in data['entry']]
 
-                # Cohort my patients
-                fhir_group = {}
-                fhir_group['id'] = ','.join([str(e) for e in fhir_groups_ids])
-                fhir_group['name'] = "Mes patients"
-                fhir_group['quantity'] = sum([e['resource']['quantity'] for e in data['entry']])
-                create_cohort(fhir_group, cohort_type="MY_PATIENTS")
+                if len(fhir_groups_ids) > 0:
+                    # Cohort my patients
+                    fhir_group = {
+                        'id': ','.join([str(e) for e in fhir_groups_ids]),
+                        'name': "Mes patients",
+                        'quantity': sum([e['resource']['quantity'] for e in data['entry']])
+                    }
+                    create_cohort(fhir_group, cohort_type="MY_PATIENTS")
+        else:
+            logger.error('Error while sending a get request to the FHIR API ({}), '
+                         'response contains: {}'.format(url, str(resp.__dict__)))
+            raise HttpResponse(status=500)
 
 
 @staticmethod
