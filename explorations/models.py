@@ -5,8 +5,6 @@ from django.core.validators import validate_comma_separated_integer_list
 from cohort.models import BaseModel, User, Perimeter
 from django.db import models
 
-from cohort_back.settings import OMOP_COMPUTE_API_URL
-
 
 class Exploration(BaseModel):
     """

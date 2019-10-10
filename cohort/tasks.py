@@ -169,9 +169,11 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
                 for fhir_group in data['entry']:
                     create_cohort(fhir_group['resource'], cohort_type="MY_ORGANIZATIONS")
 
+                fhir_groups_ids = [e['id'] for e in data['entry']]
+
                 # Cohort my patients
                 fhir_group = {}
-                fhir_group['id'] = ','.join([str(e) for e in org_ids])
+                fhir_group['id'] = ','.join([str(e) for e in fhir_groups_ids])
                 fhir_group['name'] = "Mes patients"
                 fhir_group['quantity'] = sum([e['resource']['quantity'] for e in data['entry']])
                 create_cohort(fhir_group, cohort_type="MY_PATIENTS")
