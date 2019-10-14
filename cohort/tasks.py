@@ -63,8 +63,16 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
     e.owner = user
     e.save()
     logger.error("Type of jwt_access_token: {}".format(str(type(jwt_access_token))))
-    chart_models = get(OMOP_COMPUTE_API_URL + "/chart_model/",
-                       headers={"Authorization": "Bearer " + jwt_access_token}).json()['results']
+
+    url = OMOP_COMPUTE_API_URL + "/chart_model/"
+    resp = get(url, headers={"Authorization": "Bearer " + jwt_access_token})
+
+    if resp.status_code != 200:
+        logger.error('Error while sending a get request to the omop compute api ({}), '
+                     'response contains: {}'.format(url, str(resp.__dict__)))
+        raise HttpResponse(status=500)
+
+    chart_models = resp.json()['results']
 
     def create_cohort(fhir_group, cohort_type):
         # If this cohort already exists, do not create it again
@@ -142,16 +150,17 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
     url = "https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity={}".format(id_fhir)
     resp = get(url, headers={"Authorization": jwt_access_token})
 
-    if resp.status_code == 200:
-        data = resp.json()
-        if 'entry' in data:
-            logger.error("Got {} results for {}!".format(len(data['entry']), url))
-            for fhir_group in data['entry']:
-                create_cohort(fhir_group['resource'], cohort_type="IMPORT_I2B2")
-    else:
+    if resp.status_code != 200:
         logger.error('Error while sending a get request to the FHIR API ({}), '
                      'response contains: {}'.format(url, str(resp.__dict__)))
         raise HttpResponse(status=500)
+
+    data = resp.json()
+    if 'entry' in data:
+        logger.error("Got {} results for {}!".format(len(data['entry']), url))
+        for fhir_group in data['entry']:
+            create_cohort(fhir_group['resource'], cohort_type="IMPORT_I2B2")
+
 
     # Create Org cohorts
     url = "https://fhir-r4-qual.eds.aphp.fr/PractitionerRole?practitioner={}".format(id_fhir)
@@ -174,27 +183,28 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
         url = "https://fhir-r4-qual.eds.aphp.fr/Group?managing-entity=Organization/{}".format(','.join(org_ids))
         resp = get(url, headers={"Authorization": jwt_access_token})
 
-        if resp.status_code == 200:
-            data = resp.json()
-            if 'entry' in data:
-                logger.error("Got {} results for {}!".format(len(data['entry']), url))
-                for fhir_group in data['entry']:
-                    create_cohort(fhir_group['resource'], cohort_type="MY_ORGANIZATIONS")
-
-                fhir_groups_ids = [e['resource']['id'] for e in data['entry']]
-
-                if len(fhir_groups_ids) > 0:
-                    # Cohort my patients
-                    fhir_group = {
-                        'id': ','.join([str(e) for e in fhir_groups_ids]),
-                        'name': "Mes patients",
-                        'quantity': sum([e['resource']['quantity'] for e in data['entry']])
-                    }
-                    create_cohort(fhir_group, cohort_type="MY_PATIENTS")
-        else:
+        if resp.status_code != 200:
             logger.error('Error while sending a get request to the FHIR API ({}), '
                          'response contains: {}'.format(url, str(resp.__dict__)))
             raise HttpResponse(status=500)
+
+        data = resp.json()
+        if 'entry' in data:
+            logger.error("Got {} results for {}!".format(len(data['entry']), url))
+            for fhir_group in data['entry']:
+                create_cohort(fhir_group['resource'], cohort_type="MY_ORGANIZATIONS")
+
+            fhir_groups_ids = [e['resource']['id'] for e in data['entry']]
+
+            if len(fhir_groups_ids) > 0:
+                # Cohort my patients
+                fhir_group = {
+                    'id': ','.join([str(e) for e in fhir_groups_ids]),
+                    'name': "Mes patients",
+                    'quantity': sum([e['resource']['quantity'] for e in data['entry']])
+                }
+                create_cohort(fhir_group, cohort_type="MY_PATIENTS")
+        
 
 
 @staticmethod
