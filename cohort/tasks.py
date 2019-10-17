@@ -120,7 +120,10 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
         c.perimeter = p1
         c.fhir_groups_ids = fhir_group['id']
         if 'extension' in fhir_group:
-            c.created_at = datetime.strptime(fhir_group['extension'][0]['valueDate'], "%Y-%m-%d")
+            try:
+                c.created_at = datetime.strptime(fhir_group['extension'][0]['valueDate'], "%Y-%m-%d")
+            except ValueError:
+                pass
         c.type = cohort_type
         c.result_size = fhir_group['quantity']
         c.save()
@@ -160,7 +163,6 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
         logger.error("Got {} results for {}!".format(len(data['entry']), url))
         for fhir_group in data['entry']:
             create_cohort(fhir_group['resource'], cohort_type="IMPORT_I2B2")
-
 
     # Create Org cohorts
     url = "https://fhir-r4-qual.eds.aphp.fr/PractitionerRole?practitioner={}".format(id_fhir)
@@ -204,7 +206,6 @@ def import_cohorts_from_i2b2(user, jwt_access_token):
                     'quantity': sum([e['resource']['quantity'] for e in data['entry']])
                 }
                 create_cohort(fhir_group, cohort_type="MY_PATIENTS")
-        
 
 
 @staticmethod

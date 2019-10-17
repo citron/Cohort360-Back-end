@@ -10,3 +10,5 @@ pyjwt==1.7.1
 
 Celery==4.3.*
 redis==3.3.*
+
+psycopg2==2.8.*
