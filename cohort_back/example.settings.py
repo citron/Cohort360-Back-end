@@ -160,3 +160,24 @@ SWAGGER_SETTINGS = {
 }
 
 APPEND_SLASH = False
+
+# Celery
+CELERY_BROKER_URL = 'redis://localhost:6379'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379'
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TASK_SERIALIZER = 'json'
+
+CELERY_BEAT_SCHEDULE = {
+    'task-update-cohorts': {
+        'task': 'cohort_back.celery.import_i2b2',
+        'schedule': 30
+    },
+}
+
+
+PG_OMOP_URL = "ip"
+PG_OMOP_DBNAME = "name"
+PG_OMOP_SCHEMA = "name"
+PG_OMOP_USER = "user"
+PG_OMOP_PASS = "password"

@@ -9,7 +9,6 @@ from rest_framework_simplejwt.exceptions import AuthenticationFailed
 
 from cohort.auth import IDServer
 from cohort.models import User, get_or_create_user
-from cohort.tasks import import_i2b2_if_needed_else_background
 
 
 class HttpResponseUnauthorized(HttpResponse):
@@ -30,7 +29,6 @@ class AuthenticationMiddleware(MiddlewareMixin):
                 request.user = User.objects.get(username=payload['username'])
             except ObjectDoesNotExist:
                 request.user = get_or_create_user(jwt_access_token=jwt_access_token)
-                import_i2b2_if_needed_else_background(request.user, jwt_access_token=jwt_access_token)
             return
         return HttpResponseForbidden('<h1>403 Forbidden</h1>', content_type='text/html')
 
@@ -57,7 +55,6 @@ class CustomAuthentication(BaseAuthentication):
             return u, raw_token
         except ObjectDoesNotExist:
             user = get_or_create_user(jwt_access_token=raw_token)
-            import_i2b2_if_needed_else_background(user, jwt_access_token=raw_token)
             return user, raw_token
 
     def get_header(self, request):

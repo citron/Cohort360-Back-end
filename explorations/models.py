@@ -12,7 +12,7 @@ class Exploration(BaseModel):
     """
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_explorations')
 
-    name = models.CharField(max_length=30)
+    name = models.CharField(max_length=50)
     description = models.TextField(blank=True)
     favorite = models.BooleanField(default=False)
 
@@ -23,7 +23,7 @@ class Exploration(BaseModel):
 class Request(BaseModel):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_requests')
 
-    name = models.CharField(max_length=30)
+    name = models.CharField(max_length=50)
     description = models.TextField(blank=True)
     favorite = models.BooleanField(default=False)
 
@@ -106,7 +106,7 @@ class RequestQueryResult(BaseModel):
 class Cohort(BaseModel):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_cohorts')
 
-    name = models.CharField(max_length=30)
+    name = models.CharField(max_length=50)
     description = models.TextField(blank=True)
     favorite = models.BooleanField(default=False)
 
