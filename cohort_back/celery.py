@@ -162,7 +162,7 @@ def import_i2b2():
         my_patients = {
             'fhir_id': ','.join([str(e['fhir_id']) for e in care_sites]),
             'name': "Mes patients",
-            'size': 0,
+            'size': sum([cs['size'] for cs in care_sites]),
             'creation_date': None
         }
 
