@@ -130,11 +130,12 @@ def create_cohort(user, perimeter, exploration, fhir_group, cohort_type):
     c.request = r
     c.perimeter = perimeter
     c.fhir_groups_ids = fhir_id
-    if create_date is not None:
-        c.created_at = create_date
     c.type = cohort_type
     c.result_size = size
     c.save()
+    if create_date is not None:
+        c.created_at = create_date
+        c.save()
 
 
 @app.task()

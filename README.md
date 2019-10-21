@@ -78,7 +78,7 @@ pour l'appliquer en BDD.
 First launch celery: 
 
 ```bash
-celery worker -A cohort_back --loglevel=info
+celery worker -B -A cohort_back --loglevel=info
 ```
 
 

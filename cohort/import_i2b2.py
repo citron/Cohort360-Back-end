@@ -65,6 +65,8 @@ def get_user_cohorts(user_id_aph):
         and cd.cohort_size>0
         """.format(user_id_aph)
     )
+    if tmp is None:
+        return []
     res = []
     for t in tmp:
         res.append({
@@ -89,6 +91,8 @@ def get_user_care_sites_cohorts(user_id_aph):
         and csh.domain_id='Provider'
         """.format(user_id_aph)
     )
+    if tmp is None:
+        return []
     res = []
     for t in tmp:
         res.append({
