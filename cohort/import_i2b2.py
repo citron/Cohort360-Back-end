@@ -81,7 +81,7 @@ def get_user_cohorts(user_id_aph):
 def get_user_care_sites_cohorts(user_id_aph):
     tmp = get_multiple(
         """
-        select cs.care_site_id, cs.care_site_name, cd.cohort_size 
+        select cd.cohort_definition_id, cs.care_site_name, cd.cohort_size 
         from care_site cs 
         join care_site_history csh on cs.care_site_id=csh.care_site_id 
         join provider p on p.provider_id=csh.entity_id 
