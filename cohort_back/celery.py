@@ -92,7 +92,10 @@ def create_cohort(user, perimeter, exploration, fhir_group, cohort_type):
     if cohort_type == 'MY_PATIENTS':
         c = Cohort.objects.filter(owner=user, type='MY_PATIENTS').count()
         if c == 1:
-            Cohort.objects.get(owner=user, type='MY_PATIENTS').delete()
+            cohort = Cohort.objects.get(owner=user, type='MY_PATIENTS')
+            cohort.fhir_groups_ids = fhir_id
+            cohort.save()
+            return
     elif cohort_type in ['IMPORT_I2B2', 'MY_ORGANIZATIONS']:
         c = Cohort.objects.filter(owner=user, name=name, fhir_groups_ids=str(int(fhir_id))).count()
         if c == 1:
