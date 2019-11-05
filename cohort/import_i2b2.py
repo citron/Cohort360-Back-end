@@ -102,3 +102,15 @@ def get_user_care_sites_cohorts(user_id_aph):
             'creation_date': None,
         })
     return res
+
+
+def get_unique_patient_count_from_org_union(org_ids):
+    tmp = get_one(
+        """
+        SELECT COUNT(DISTINCT vo.person_id) FROM omop.visit_occurrence vo
+        WHERE vo.care_site_id IN ({})
+        """.format(','.join([str(e) for e in org_ids]))
+    )
+    if tmp is None:
+        raise Exception("Code errored! Internal 4558714.")
+    return tmp

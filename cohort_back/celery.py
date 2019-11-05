@@ -3,7 +3,8 @@ import os
 from celery import Celery
 
 # set the default Django settings module for the 'celery' program.
-
+from cohort.import_i2b2 import get_unique_patient_count_from_org_union
+from explorations.models import Cohort
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cohort_back.settings')
 
@@ -94,12 +95,13 @@ def create_cohort(user, perimeter, exploration, fhir_group, cohort_type):
         if c == 1:
             cohort = Cohort.objects.get(owner=user, type='MY_PATIENTS')
             cohort.fhir_groups_ids = fhir_id
+            cohort.result_size = size
             cohort.save()
-            return
+            return cohort
     elif cohort_type in ['IMPORT_I2B2', 'MY_ORGANIZATIONS']:
-        c = Cohort.objects.filter(owner=user, name=name, fhir_groups_ids=str(int(fhir_id))).count()
-        if c == 1:
-            return
+        cohort = Cohort.objects.filter(owner=user, name=name, fhir_groups_ids=str(int(fhir_id)), type=cohort_type)
+        if cohort.count() == 1:
+            return cohort[0]
 
     r = Request()
     r.owner = user
@@ -139,6 +141,7 @@ def create_cohort(user, perimeter, exploration, fhir_group, cohort_type):
     if create_date is not None:
         c.created_at = create_date
         c.save()
+    return c
 
 
 @app.task()
@@ -159,14 +162,23 @@ def import_i2b2():
             create_cohort(user, p1, explo, cohort, 'IMPORT_I2B2')
 
         care_sites = get_user_care_sites_cohorts(user.username)
+        created_cohorts = []
         for care_site in care_sites:
-            create_cohort(user, p1, explo, care_site, 'MY_ORGANIZATIONS')
+            created_cohorts.append(create_cohort(user, p1, explo, care_site, 'MY_ORGANIZATIONS'))
+
+        # Delete old organizations that do not exist anymore
+        Cohort.objects\
+            .filter(owner=user, type='MY_ORGANIZATIONS')\
+            .exclude(uuid__in=[c.uuid for c in created_cohorts]).delete()
+
+        my_patients_size = get_unique_patient_count_from_org_union(org_ids=[cs['fhir_id'] for cs in care_sites])
 
         my_patients = {
             'fhir_id': ','.join([str(e['fhir_id']) for e in care_sites]),
             'name': "Mes patients",
-            'size': sum([cs['size'] for cs in care_sites]),
+            'size': my_patients_size,
             'creation_date': None
         }
 
-        create_cohort(user, p1, explo, my_patients, 'MY_PATIENTS')
+        if my_patients['size'] > 0:
+            create_cohort(user, p1, explo, my_patients, 'MY_PATIENTS')

@@ -124,3 +124,6 @@ class Cohort(BaseModel):
     type = models.CharField(max_length=20, choices=COHORT_TYPE_CHOICES)
 
     result_size = models.BigIntegerField()  # Number of results as returned by SolR
+
+    class Meta:
+        unique_together = [['owner', 'fhir_groups_ids', 'type']]
