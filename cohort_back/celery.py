@@ -170,7 +170,7 @@ def import_i2b2():
             .filter(owner=user, type='MY_ORGANIZATIONS')\
             .exclude(uuid__in=[c.uuid for c in created_cohorts]).delete()
 
-        my_patients_size = get_unique_patient_count_from_org_union(org_ids=[cs['fhir_id'] for cs in care_sites])
+        my_patients_size = get_unique_patient_count_from_org_union(org_ids=[cs['care_site_id'] for cs in care_sites])
 
         my_patients = {
             'fhir_id': ','.join([str(e['fhir_id']) for e in care_sites]),
