@@ -4,7 +4,6 @@ from celery import Celery
 
 # set the default Django settings module for the 'celery' program.
 from cohort.import_i2b2 import get_unique_patient_count_from_org_union
-from explorations.models import Cohort
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cohort_back.settings')
 
@@ -148,7 +147,7 @@ def create_cohort(user, perimeter, exploration, fhir_group, cohort_type):
 def import_i2b2():
     from cohort.models import User, Perimeter
     from cohort.import_i2b2 import get_user_cohorts, get_user_care_sites_cohorts
-    from explorations.models import Exploration
+    from explorations.models import Cohort, Exploration
 
     for user in User.objects.all():
         if Perimeter.objects.filter(owner=user).count() < 1:
