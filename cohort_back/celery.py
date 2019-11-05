@@ -179,5 +179,6 @@ def import_i2b2():
             'creation_date': None
         }
 
-        if my_patients['size'] > 0:
-            create_cohort(user, p1, explo, my_patients, 'MY_PATIENTS')
+        # To add when count is correct
+        # if my_patients['size'] > 0:
+        create_cohort(user, p1, explo, my_patients, 'MY_PATIENTS')
