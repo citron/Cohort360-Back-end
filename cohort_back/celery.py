@@ -170,15 +170,16 @@ def import_i2b2():
             .filter(owner=user, type='MY_ORGANIZATIONS')\
             .exclude(uuid__in=[c.uuid for c in created_cohorts]).delete()
 
-        my_patients_size = get_unique_patient_count_from_org_union(org_ids=[cs['care_site_id'] for cs in care_sites])
+        if len(care_sites) > 0:
+            my_patients_size = get_unique_patient_count_from_org_union(org_ids=[cs['care_site_id'] for cs in care_sites])
 
-        my_patients = {
-            'fhir_id': ','.join([str(e['fhir_id']) for e in care_sites]),
-            'name': "Mes patients",
-            'size': my_patients_size,
-            'creation_date': None
-        }
+            my_patients = {
+                'fhir_id': ','.join([str(e['fhir_id']) for e in care_sites]),
+                'name': "Mes patients",
+                'size': my_patients_size,
+                'creation_date': None
+            }
 
-        # To add when count is correct
-        # if my_patients['size'] > 0:
-        create_cohort(user, p1, explo, my_patients, 'MY_PATIENTS')
+            # To add when count is correct
+            # if my_patients['size'] > 0:
+            create_cohort(user, p1, explo, my_patients, 'MY_PATIENTS')
