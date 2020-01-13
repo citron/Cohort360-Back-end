@@ -3,7 +3,7 @@ import os
 from celery import Celery
 
 # set the default Django settings module for the 'celery' program.
-from cohort.import_i2b2 import get_unique_patient_count_from_org_union
+# from cohort.import_i2b2 import get_unique_patient_count_from_org_union
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cohort_back.settings')
 
@@ -166,17 +166,18 @@ def import_i2b2():
             created_cohorts.append(create_cohort(user, p1, explo, care_site, 'MY_ORGANIZATIONS'))
 
         # Delete old organizations that do not exist anymore
-        Cohort.objects\
-            .filter(owner=user, type='MY_ORGANIZATIONS')\
+        Cohort.objects \
+            .filter(owner=user, type='MY_ORGANIZATIONS') \
             .exclude(uuid__in=[c.uuid for c in created_cohorts]).delete()
 
         if len(care_sites) > 0:
-            my_patients_size = get_unique_patient_count_from_org_union(org_ids=[cs['care_site_id'] for cs in care_sites])
+            # my_patients_size = get_unique_patient_count_from_org_union(
+            #     org_ids=[cs['care_site_id'] for cs in care_sites])
 
             my_patients = {
                 'fhir_id': ','.join([str(e['fhir_id']) for e in care_sites]),
                 'name': "Mes patients",
-                'size': my_patients_size,
+                'size': -1,  # my_patients_size,
                 'creation_date': None
             }
 
