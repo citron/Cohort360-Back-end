@@ -21,6 +21,21 @@ def req_url(method, end, data=None):
         data=data)
 
 
+def clean_issue(issue):
+    del issue['author']
+    del issue['milestone']
+    del issue['labels']
+    del issue['assignees']
+    del issue['assignee']
+    del issue['user_notes_count']
+    del issue['upvotes']
+    del issue['downvotes']
+    del issue['due_date']
+    del issue['confidential']
+    del issue['web_url']
+    return issue
+
+
 class VotingGet(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -62,8 +77,7 @@ class VotingGet(APIView):
         Return a list of gitlab issues. Please refer to https://docs.gitlab.com/ee/api/issues.html for parameters.
         """
 
-        allowed_params = ['per_page', 'page', 'state', 'labels', 'milestone', 'iids[]', 'author_id', 'assignee_id',
-                          'my_reaction_emoji', 'search', 'confidential', 'order_by', 'sort', 'created_after',
+        allowed_params = ['per_page', 'page', 'state', 'labels', 'search', 'order_by', 'sort', 'created_after',
                           'created_before', 'updated_after', 'updated_before']
         params = []
 
@@ -73,6 +87,8 @@ class VotingGet(APIView):
             return Response({'error': 'per_page, page and labels parameters required!'},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        # Todo : order_by_vote
+        order_by_vote = False
         for allowed_param in allowed_params:
             if allowed_param in request.query_params:
                 if allowed_param == 'labels':
@@ -80,7 +96,8 @@ class VotingGet(APIView):
                         if l not in VOTING_GITLAB['authorized_labels']:
                             return Response({'error': 'label "{}" not authorized! Authorized labels are: "{}"'.format(
                                 l, ','.join(VOTING_GITLAB['authorized_labels']))}, status=status.HTTP_400_BAD_REQUEST)
-
+                if allowed_param == 'order_by' and request.query_params['order_by'] == 'votes':
+                    order_by_vote = True
                 params.append('{}={}'.format(allowed_param, request.query_params[allowed_param]))
 
         res = req_url("get", "/issues?{}".format('&'.join(params)))
@@ -100,7 +117,7 @@ class VotingGet(APIView):
             r['thumbs_total'] = issue_pos + issue_neg
             r['thumbs_positive'] = issue_pos
             r['thumbs_negative'] = issue_neg
-            final_result.append(r)
+            final_result.append(clean_issue(r))
         return Response(final_result)
 
 
@@ -137,8 +154,9 @@ class VotingPost(APIView):
             return Response({'error': 'missing label, title or description in the POST request'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        title = request.data['title'] + ' Sent by ' + request.user.displayname if request.user.displayname else 'Unknown'
-        description = request.data['description']
+        title = request.data['title']
+        description = request.data['description'] + '\n\n Sent by ' + request.user.displayname \
+            if request.user.displayname else 'Unknown'
         label = request.data['label']
 
         if label not in VOTING_GITLAB['post_labels']:
@@ -160,7 +178,8 @@ class VotingPost(APIView):
         issue['thumbs_total'] = 0
         issue['thumbs_positive'] = 0
         issue['thumbs_negative'] = 0
-        return Response(issue)
+
+        return Response(clean_issue(issue))
 
 
 class Thumbs(APIView):
