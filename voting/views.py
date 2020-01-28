@@ -1,7 +1,6 @@
 import coreapi
 import coreschema
 import requests
-from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Sum
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -13,18 +12,19 @@ from cohort_back.settings import VOTING_GITLAB
 from voting.models import Vote
 
 
-def req_url(method, end):
+def req_url(method, end, data=None):
     url = VOTING_GITLAB['api_url'] + "/projects/" + VOTING_GITLAB['project_name'] + end
     print(url)
     return getattr(requests, method)(
         url,
-        headers={"PRIVATE-TOKEN": VOTING_GITLAB['private_token']})
+        headers={"PRIVATE-TOKEN": VOTING_GITLAB['private_token']},
+        data=data)
 
 
-class Voting(APIView):
+class VotingGet(APIView):
     permission_classes = (IsAuthenticated,)
 
-    get_schema = AutoSchema(manual_fields=[
+    schema = AutoSchema(manual_fields=[
         coreapi.Field(
             "per_page",
             required=True,
@@ -50,46 +50,10 @@ class Voting(APIView):
             schema=coreschema.String()
         ),
         coreapi.Field(
-            "milestone",
-            required=False,
-            location="milestone",
-            schema=coreschema.String()
-        ),
-        coreapi.Field(
-            "iids[]",
-            required=False,
-            location="iids[]",
-            schema=coreschema.Integer()
-        ),
-        coreapi.Field(
-            "author_id",
-            required=False,
-            location="author_id",
-            schema=coreschema.Integer()
-        ),
-        coreapi.Field(
-            "assignee_id",
-            required=False,
-            location="assignee_id",
-            schema=coreschema.Integer()
-        ),
-        coreapi.Field(
-            "my_reaction_emoji",
-            required=False,
-            location="my_reaction_emoji",
-            schema=coreschema.String()
-        ),
-        coreapi.Field(
             "search",
             required=False,
             location="search",
             schema=coreschema.String()
-        ),
-        coreapi.Field(
-            "confidential",
-            required=False,
-            location="confidential",
-            schema=coreschema.Boolean()
         ),
     ])
 
@@ -97,7 +61,6 @@ class Voting(APIView):
         """
         Return a list of gitlab issues. Please refer to https://docs.gitlab.com/ee/api/issues.html for parameters.
         """
-        self.schema = Voting.get_schema
 
         allowed_params = ['per_page', 'page', 'state', 'labels', 'milestone', 'iids[]', 'author_id', 'assignee_id',
                           'my_reaction_emoji', 'search', 'confidential', 'order_by', 'sort', 'created_after',
@@ -127,9 +90,24 @@ class Voting(APIView):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         result = res.json()
-        return Response(result)
+        final_result = []
+        for r in result:
+            votes = Vote.objects.filter(issue_id=r['id'])
+            issue_neg = votes.filter(vote=-1).aggregate(Sum('vote'))['vote__sum']
+            issue_neg = issue_neg if issue_neg is not None else 0
+            issue_pos = votes.filter(vote=1).aggregate(Sum('vote'))['vote__sum']
+            issue_pos = issue_pos if issue_pos is not None else 0
+            r['thumbs_total'] = issue_pos + issue_neg
+            r['thumbs_positive'] = issue_pos
+            r['thumbs_negative'] = issue_neg
+            final_result.append(r)
+        return Response(final_result)
 
-    post_schema = AutoSchema(manual_fields=[
+
+class VotingPost(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    schema = AutoSchema(manual_fields=[
         coreapi.Field(
             "title",
             required=True,
@@ -142,25 +120,47 @@ class Voting(APIView):
             location="description",
             schema=coreschema.String()
         ),
+        coreapi.Field(
+            "label",
+            required=True,
+            location="label",
+            schema=coreschema.String()
+        ),
     ])
 
     def post(self, request):
         """
         Post a new issue. This issue is either a bug or a feature request, and will be added in corresponding columns in gitlab.
-        The posted data must contains a title and a description.
+        The posted data must contains a single label, a title and a description.
         """
-        self.schema = Voting.post_schema
-
-        if 'title' not in request.data or 'description' not in request.data:
-            return Response({'error': 'missing title or description in the POST request'},
+        if 'title' not in request.data or 'description' not in request.data or 'label' not in request.data:
+            return Response({'error': 'missing label, title or description in the POST request'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        title = request.data['title']
+        title = request.data['title'] + ' Sent by ' + request.user.displayname if request.user.displayname else 'Unknown'
         description = request.data['description']
+        label = request.data['label']
 
+        if label not in VOTING_GITLAB['post_labels']:
+            return Response({'error': 'label "{}" not authorized, choices are: "{}"'.format(
+                label, ','.join(VOTING_GITLAB['post_labels']))},
+                status=status.HTTP_400_BAD_REQUEST)
 
+        if len(title) == 0 or len(description) == 0:
+            return Response({'error': 'title or description empty!'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        return
+        res = req_url("post", "/issues", data={'title': title, 'description': description, 'labels': label})
+        if res.status_code != 201:
+            return Response({"Internal": ["Error {} while contacting gitlab server!".format(res.status_code)],
+                             "contents": res.text},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        issue = res.json()
+        issue['thumbs_total'] = 0
+        issue['thumbs_positive'] = 0
+        issue['thumbs_negative'] = 0
+        return Response(issue)
 
 
 class Thumbs(APIView):

@@ -190,5 +190,6 @@ VOTING_GITLAB = {
     'project_name': 'cohort360%2Ffront-end',
     'gitlab_private_token': 'xxxxxxxxx',
     'authorized_labels': ['Backlog', 'To Do', 'Doing Back', 'Doing Front', 'Anomalie', 'Anomalies résolues',
-                          'Déploiement', 'Feature request', 'Bug request']
+                          'Déploiement', 'Feature request', 'Bug request', 'None'],
+    'post_labels': ['Bug request', 'Feature request'],
 }
