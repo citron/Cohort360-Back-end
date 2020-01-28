@@ -25,6 +25,8 @@ from explorations.views import ExplorationViewSet, RequestViewSet, RequestQueryS
     CohortViewSet, SearchCriteria, PerimeterViewSet
 
 # Routers provide an easy way of automatically determining the URL conf.
+from voting.views import Voting, Thumbs
+
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet)
 router.register(r'perimeters', PerimeterViewSet)
@@ -44,5 +46,7 @@ urlpatterns = [
     url(r'^docs/', schema_view),
     url(r'^accounts/', include('rest_framework.urls')),
     url(r'^search/criteria/$', SearchCriteria.as_view(), name="search_criteria"),
+    url(r'^voting/issues', Voting.as_view(), name='voting_issues'),
+    url(r'^voting/thumbs', Thumbs.as_view(), name='voting_thumbs'),
     # url(r'^groups/<str:name>/add/<str:username>$', SearchCriteria.as_view(), name="search_criteria"),
 ]
