@@ -1,127 +1,44 @@
 import coreapi
 import coreschema
-import requests
-from django.db.models import Sum
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.schemas import AutoSchema
 from rest_framework.views import APIView
 
+from cohort.views import BaseViewSet
 from cohort_back.settings import VOTING_GITLAB
-from voting.models import Vote
+from voting.celery import get_or_create_gitlab_issue
+from voting.filters import ContainsFilter
+from voting.models import Vote, GitlabIssue
+from voting.serializers import GitlabIssueSerializer
+from voting.util import req_url
 
 
-def req_url(method, end, data=None):
-    url = VOTING_GITLAB['api_url'] + "/projects/" + VOTING_GITLAB['project_name'] + end
-    print(url)
-    return getattr(requests, method)(
-        url,
-        headers={"PRIVATE-TOKEN": VOTING_GITLAB['private_token']},
-        data=data)
+fields = ("iid", "state", 'labels',
+          "gitlab_created_at", "gitlab_updated_at", "gitlab_closed_at",
+          "title", "description",
+          "votes_positive_sum", "votes_neutral_sum", "votes_negative_sum", "votes_total_sum",)
 
 
-def clean_issue(issue):
-    del issue['author']
-    del issue['milestone']
-    del issue['labels']
-    del issue['assignees']
-    del issue['assignee']
-    del issue['user_notes_count']
-    del issue['upvotes']
-    del issue['downvotes']
-    del issue['due_date']
-    del issue['confidential']
-    del issue['web_url']
-    return issue
+class GitlabIssueViewSet(BaseViewSet):
+    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter, ContainsFilter)
+
+    queryset = GitlabIssue.objects.all()
+    serializer_class = GitlabIssueSerializer
+    http_method_names = ['get']
+
+    filterset_fields = ('iid', 'state', 'labels', 'title')
+    ordering_fields = ('iid', 'state', 'gitlab_created_at', 'gitlab_updated_at', 'gitlab_closed_at',
+                       'votes_positive_sum', 'votes_neutral_sum', 'votes_negative_sum', 'votes_total_sum',)
+    ordering = ('-votes_total_sum',)
+    search_fields = ['title', 'description', 'labels']
+    contains_fields = ['labels']
 
 
-class VotingGet(APIView):
-    permission_classes = (IsAuthenticated,)
-
-    schema = AutoSchema(manual_fields=[
-        coreapi.Field(
-            "per_page",
-            required=True,
-            location="per_page",
-            schema=coreschema.Integer()
-        ),
-        coreapi.Field(
-            "page",
-            required=True,
-            location="page",
-            schema=coreschema.Integer()
-        ),
-        coreapi.Field(
-            "state",
-            required=False,
-            location="state",
-            schema=coreschema.String()
-        ),
-        coreapi.Field(
-            "labels",
-            required=True,
-            location="labels",
-            schema=coreschema.String()
-        ),
-        coreapi.Field(
-            "search",
-            required=False,
-            location="search",
-            schema=coreschema.String()
-        ),
-    ])
-
-    def get(self, request):
-        """
-        Return a list of gitlab issues. Please refer to https://docs.gitlab.com/ee/api/issues.html for parameters.
-        """
-
-        allowed_params = ['per_page', 'page', 'state', 'labels', 'search', 'order_by', 'sort', 'created_after',
-                          'created_before', 'updated_after', 'updated_before']
-        params = []
-
-        if 'per_page' not in request.query_params \
-                or 'page' not in request.query_params \
-                or 'labels' not in request.query_params:
-            return Response({'error': 'per_page, page and labels parameters required!'},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        # Todo : order_by_vote
-        order_by_vote = False
-        for allowed_param in allowed_params:
-            if allowed_param in request.query_params:
-                if allowed_param == 'labels':
-                    for l in request.query_params['labels'].split(','):
-                        if l not in VOTING_GITLAB['authorized_labels']:
-                            return Response({'error': 'label "{}" not authorized! Authorized labels are: "{}"'.format(
-                                l, ','.join(VOTING_GITLAB['authorized_labels']))}, status=status.HTTP_400_BAD_REQUEST)
-                if allowed_param == 'order_by' and request.query_params['order_by'] == 'votes':
-                    order_by_vote = True
-                params.append('{}={}'.format(allowed_param, request.query_params[allowed_param]))
-
-        res = req_url("get", "/issues?{}".format('&'.join(params)))
-        if res.status_code != 200:
-            return Response({"Internal": ["Error {} while contacting gitlab server!".format(res.status_code)],
-                             "contents": res.text},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        result = res.json()
-        final_result = []
-        for r in result:
-            votes = Vote.objects.filter(issue_id=r['id'])
-            issue_neg = votes.filter(vote=-1).aggregate(Sum('vote'))['vote__sum']
-            issue_neg = issue_neg if issue_neg is not None else 0
-            issue_pos = votes.filter(vote=1).aggregate(Sum('vote'))['vote__sum']
-            issue_pos = issue_pos if issue_pos is not None else 0
-            r['thumbs_total'] = issue_pos + issue_neg
-            r['thumbs_positive'] = issue_pos
-            r['thumbs_negative'] = issue_neg
-            final_result.append(clean_issue(r))
-        return Response(final_result)
-
-
-class VotingPost(APIView):
+class IssuePost(APIView):
     permission_classes = (IsAuthenticated,)
 
     schema = AutoSchema(manual_fields=[
@@ -174,12 +91,9 @@ class VotingPost(APIView):
                              "contents": res.text},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        issue = res.json()
-        issue['thumbs_total'] = 0
-        issue['thumbs_positive'] = 0
-        issue['thumbs_negative'] = 0
+        gi = get_or_create_gitlab_issue(res.json())
 
-        return Response(clean_issue(issue))
+        return Response(GitlabIssueSerializer(gi).data)
 
 
 class Thumbs(APIView):
@@ -187,9 +101,9 @@ class Thumbs(APIView):
 
     schema = AutoSchema(manual_fields=[
         coreapi.Field(
-            "issue_id",
+            "issue_iid",
             required=True,
-            location="issue_id",
+            location="issue_iid",
             schema=coreschema.Integer()
         ),
         coreapi.Field(
@@ -201,14 +115,14 @@ class Thumbs(APIView):
     ])
 
     def post(self, request):
-        if 'issue_id' not in request.data or 'vote' not in request.data:
+        if 'issue_iid' not in request.data or 'vote' not in request.data:
             return Response(status=status.HTTP_400_BAD_REQUEST)
         try:
-            issue_id = int(request.data['issue_id'])
-            if issue_id < 0:
+            issue_iid = int(request.data['issue_iid'])
+            if issue_iid < 0:
                 raise ValueError()
         except ValueError:
-            return Response({'error': 'issue_id is not a valid positive integer'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'issue_iid is not a valid positive integer'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             vote_value = int(request.data['vote'])
@@ -217,16 +131,14 @@ class Thumbs(APIView):
         except ValueError:
             return Response({'error': 'vote should be either -1, 0 or 1'}, status=status.HTTP_400_BAD_REQUEST)
 
-        vote = Vote.objects.get_or_create(issue_id=issue_id, user=request.user)[0]
+        try:
+            gi = GitlabIssue.objects.get(iid=issue_iid)
+        except GitlabIssue.DoesNotExist:
+            raise Response({'error': 'issue_iid does not match an existing gitlab issue.'},
+                           status=status.HTTP_404_NOT_FOUND)
+
+        vote = Vote.objects.get_or_create(issue=gi.uuid, user=request.user)[0]
         vote.vote = vote_value
         vote.save()
 
-        issue_neg = Vote.objects.filter(issue_id=issue_id, vote=-1).aggregate(Sum('vote'))
-        issue_neg = issue_neg['vote__sum'] if issue_neg['vote__sum'] is not None else 0
-        issue_pos = Vote.objects.filter(issue_id=issue_id, vote=1).aggregate(Sum('vote'))
-        issue_pos = issue_pos['vote__sum'] if issue_pos['vote__sum'] is not None else 0
-        issue_total = issue_pos + issue_neg
-        return Response({'issue_id': issue_id,
-                         'thumbs_total': issue_total,
-                         'thumbs_positive': issue_pos,
-                         'thumbs_negative': issue_neg})
+        return Response({'issue': GitlabIssueSerializer(gi).data})

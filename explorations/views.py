@@ -1,6 +1,6 @@
 import coreapi
 import coreschema
-from rest_framework.decorators import permission_classes, detail_route
+from rest_framework.decorators import permission_classes, action
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -64,7 +64,6 @@ class RequestQueryResultViewSet(UserObjectsRestrictedViewSet):
     search_fields = []
 
     def create(self, request, *args, **kwargs):
-
         user = request.user
 
         if 'owner_id' not in request.data:
@@ -96,7 +95,7 @@ class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
 
         return super(RequestQuerySnapshotViewSet, self).create(request, *args, **kwargs)
 
-    @detail_route(methods=['get'])
+    @action(detail=True, methods=['get'])
     @permission_classes((IsAdminOrOwner,))
     def generate_result(self, request_query_snapshot_uuid, perimeter_uuid):
         try:
@@ -109,7 +108,7 @@ class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
         return Response({'response': "Query successful!", 'data': RequestQueryResultSerializer(rqr).data},
                         status=status.HTTP_200_OK)
 
-    @detail_route(methods=['get'])
+    @action(detail=True, methods=['get'])
     @permission_classes((IsAdminOrOwner,))
     def generate_cohort(self, request_query_snapshot_uuid, perimeter_uuid, name, description):
         try:
@@ -199,7 +198,6 @@ class PerimeterViewSet(UserObjectsRestrictedViewSet):
             request.data['owner_id'] = str(user.uuid)
 
         return super(PerimeterViewSet, self).create(request, *args, **kwargs)
-
 
 
 class SearchCriteria(APIView):
