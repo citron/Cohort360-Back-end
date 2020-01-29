@@ -39,18 +39,10 @@ class Vote(BaseModel):
         (0, 'Neutral vote'),
         (-1, 'Negative vote'),
     ]
-    vote = models.IntegerField(choices=VOTE_CHOICES)
+    vote = models.IntegerField(choices=VOTE_CHOICES, default=0)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['issue', 'user'], name='unique_together_issue_user'),
         ]
 
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        issue_votes = Vote.objects.filter(issue=self.issue.uuid)
-        self.issue.votes_positive_sum = issue_votes.filter(vote=1).aggregate(Sum('vote'))
-        self.issue.votes_neutral_sum = issue_votes.filter(vote=0).aggregate(Sum('vote'))
-        self.issue.votes_negative_sum = issue_votes.filter(vote=-1).aggregate(Sum('vote'))
-        self.issue.votes_total_sum = self.issue.votes_positive_sum - self.issue.votes_negative_sum
-        self.issue.save()

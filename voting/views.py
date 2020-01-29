@@ -1,5 +1,6 @@
 import coreapi
 import coreschema
+from django.db.models import Sum
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -137,8 +138,18 @@ class Thumbs(APIView):
             raise Response({'error': 'issue_iid does not match an existing gitlab issue.'},
                            status=status.HTTP_404_NOT_FOUND)
 
-        vote = Vote.objects.get_or_create(issue=gi.uuid, user=request.user)[0]
+        vote = Vote.objects.get_or_create(issue=gi, user=request.user)[0]
         vote.vote = vote_value
         vote.save()
+
+        issue_votes = Vote.objects.filter(issue=gi)
+        gi.votes_positive_sum = issue_votes.filter(vote=1).aggregate(Sum('vote'))['vote__sum']
+        gi.votes_positive_sum = gi.votes_positive_sum if gi.votes_positive_sum else 0
+        gi.votes_neutral_sum = issue_votes.filter(vote=0).aggregate(Sum('vote'))['vote__sum']
+        gi.votes_neutral_sum = gi.votes_neutral_sum if gi.votes_neutral_sum else 0
+        gi.votes_negative_sum = issue_votes.filter(vote=-1).aggregate(Sum('vote'))['vote__sum']
+        gi.votes_negative_sum = gi.votes_negative_sum if gi.votes_negative_sum else 0
+        gi.votes_total_sum = gi.votes_positive_sum + gi.votes_negative_sum
+        gi.save()
 
         return Response({'issue': GitlabIssueSerializer(gi).data})

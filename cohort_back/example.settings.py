@@ -176,6 +176,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'cohort_back.celery.import_i2b2',
         'schedule': 30
     },
+    'task-update-gitlab-issues': {
+        'task': 'cohort_back.celery.update_gitlab_issues',
+        'schedule': 10
+    },
 }
 
 
