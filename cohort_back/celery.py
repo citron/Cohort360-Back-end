@@ -142,49 +142,49 @@ def create_cohort(user, perimeter, exploration, fhir_group, cohort_type):
         c.save()
     return c
 
-#
-# @app.task()
-# def import_i2b2():
-#     from cohort.models import User, Perimeter
-#     from cohort.import_i2b2 import get_user_cohorts, get_user_care_sites_cohorts
-#     from explorations.models import Cohort, Exploration
-#
-#     for user in User.objects.all():
-#         if Perimeter.objects.filter(owner=user).count() < 1:
-#             p1, explo = create_fake_arbo(user)
-#         else:
-#             p1 = Perimeter.objects.get(owner=user, name="Équipe de soin")
-#             explo = Exploration.objects.get(owner=user, name="Exploration i2B2")
-#
-#         cohorts = get_user_cohorts(user.username)
-#         for cohort in cohorts:
-#             create_cohort(user, p1, explo, cohort, 'IMPORT_I2B2')
-#
-#         care_sites = get_user_care_sites_cohorts(user.username)
-#         created_cohorts = []
-#         for care_site in care_sites:
-#             created_cohorts.append(create_cohort(user, p1, explo, care_site, 'MY_ORGANIZATIONS'))
-#
-#         # Delete old organizations that do not exist anymore
-#         Cohort.objects \
-#             .filter(owner=user, type='MY_ORGANIZATIONS') \
-#             .exclude(uuid__in=[c.uuid for c in created_cohorts]).delete()
-#
-#         if len(care_sites) > 0:
-#             # my_patients_size = get_unique_patient_count_from_org_union(
-#             #     org_ids=[cs['care_site_id'] for cs in care_sites])
-#
-#             my_patients = {
-#                 'fhir_id': ','.join([str(e['fhir_id']) for e in care_sites]),
-#                 'name': "Mes patients",
-#                 'size': -1,  # my_patients_size,
-#                 'creation_date': None
-#             }
-#
-#             # To add when count is correct
-#             # if my_patients['size'] > 0:
-#             create_cohort(user, p1, explo, my_patients, 'MY_PATIENTS')
-#
+
+@app.task()
+def import_i2b2():
+    from cohort.models import User, Perimeter
+    from cohort.import_i2b2 import get_user_cohorts, get_user_care_sites_cohorts
+    from explorations.models import Cohort, Exploration
+
+    for user in User.objects.all():
+        if Perimeter.objects.filter(owner=user).count() < 1:
+            p1, explo = create_fake_arbo(user)
+        else:
+            p1 = Perimeter.objects.get(owner=user, name="Équipe de soin")
+            explo = Exploration.objects.get(owner=user, name="Exploration i2B2")
+
+        cohorts = get_user_cohorts(user.username)
+        for cohort in cohorts:
+            create_cohort(user, p1, explo, cohort, 'IMPORT_I2B2')
+
+        care_sites = get_user_care_sites_cohorts(user.username)
+        created_cohorts = []
+        for care_site in care_sites:
+            created_cohorts.append(create_cohort(user, p1, explo, care_site, 'MY_ORGANIZATIONS'))
+
+        # Delete old organizations that do not exist anymore
+        Cohort.objects \
+            .filter(owner=user, type='MY_ORGANIZATIONS') \
+            .exclude(uuid__in=[c.uuid for c in created_cohorts]).delete()
+
+        if len(care_sites) > 0:
+            # my_patients_size = get_unique_patient_count_from_org_union(
+            #     org_ids=[cs['care_site_id'] for cs in care_sites])
+
+            my_patients = {
+                'fhir_id': ','.join([str(e['fhir_id']) for e in care_sites]),
+                'name': "Mes patients",
+                'size': -1,  # my_patients_size,
+                'creation_date': None
+            }
+
+            # To add when count is correct
+            # if my_patients['size'] > 0:
+            create_cohort(user, p1, explo, my_patients, 'MY_PATIENTS')
+
 
 @app.task()
 def update_gitlab_issues():
