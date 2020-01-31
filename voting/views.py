@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from cohort.views import BaseViewSet
 from cohort_back.settings import VOTING_GITLAB
 from voting.celery import get_or_create_gitlab_issue
-from voting.filters import ContainsFilter
+from voting.filters import ContainsFilter, ListContainsFilter
 from voting.models import Vote, GitlabIssue
 from voting.serializers import GitlabIssueSerializer
 from voting.util import req_url
@@ -25,7 +25,7 @@ fields = ("iid", "state", 'labels',
 
 
 class GitlabIssueViewSet(BaseViewSet):
-    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter, ContainsFilter)
+    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter, ContainsFilter, ListContainsFilter)
 
     queryset = GitlabIssue.objects.all()
     serializer_class = GitlabIssueSerializer
@@ -36,7 +36,8 @@ class GitlabIssueViewSet(BaseViewSet):
                        'votes_positive_sum', 'votes_neutral_sum', 'votes_negative_sum', 'votes_total_sum',)
     ordering = ('-votes_total_sum',)
     search_fields = ['title', 'description', 'labels']
-    contains_fields = ['labels']
+    contains_fields = ['title', 'description']
+    list_contains_fields = ['labels']
 
 
 class IssuePost(APIView):
@@ -131,6 +132,8 @@ class Thumbs(APIView):
                 raise ValueError()
         except ValueError:
             return Response({'error': 'vote should be either -1, 0 or 1'}, status=status.HTTP_400_BAD_REQUEST)
+
+        #GitlabIssue.objects.all().filter(labels__regex=)
 
         try:
             gi = GitlabIssue.objects.get(iid=issue_iid)
