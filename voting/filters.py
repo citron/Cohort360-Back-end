@@ -124,7 +124,11 @@ class ListContainsFilter(BaseFilterBackend):
             a, b = search_term.split(':')
             if a not in search_fields:
                 continue
-            q = q.filter(**{LOOKUP_SEP.join([a, 'regex']): "({}$|{},)".format(b, b)})
+            val = []
+            for bb in b.split('|'):
+                val.append("{}$|{},".format(bb, bb))
+            val = '|'.join(val)
+            q = q.filter(**{LOOKUP_SEP.join([a, 'regex']): "(" + val + ")".format(b, b)})
 
         return q
 
