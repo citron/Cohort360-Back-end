@@ -1,5 +1,4 @@
 from django.db import models
-from django.db.models import Sum
 
 from cohort.models import BaseModel, User
 
@@ -45,4 +44,3 @@ class Vote(BaseModel):
         constraints = [
             models.UniqueConstraint(fields=['issue', 'user'], name='unique_together_issue_user'),
         ]
-
