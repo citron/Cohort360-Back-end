@@ -38,7 +38,7 @@ class GitlabIssueSerializer(BaseSerializer):
     def get_user_vote(self, gitlabissue):
         vote = Vote.objects.filter(issue=gitlabissue, user=self.context['request'].user)
         if vote.exists():
-            return vote.vote
+            return vote[0].vote
         else:
             return 0
 
