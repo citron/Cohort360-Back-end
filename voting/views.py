@@ -155,4 +155,4 @@ class Thumbs(APIView):
         gi.votes_total_sum = gi.votes_positive_sum + gi.votes_negative_sum
         gi.save()
 
-        return Response({'issue': GitlabIssueSerializer(gi).data})
+        return Response({'issue': GitlabIssueSerializer(gi, context={'request': request}).data})
