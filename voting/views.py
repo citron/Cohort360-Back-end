@@ -1,20 +1,17 @@
-import coreapi
-import coreschema
 from django.db.models import Sum
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.schemas import AutoSchema
-from rest_framework.views import APIView
 
 from cohort.views import BaseViewSet
 from cohort_back.settings import VOTING_GITLAB
 from voting.celery import get_or_create_gitlab_issue
 from voting.filters import ContainsFilter, ListContainsFilter
 from voting.models import Vote, GitlabIssue
-from voting.serializers import GitlabIssueSerializer
+from voting.serializers import GitlabIssueSerializer, IssuePostSerializer, ThumbSerializer
 from voting.util import req_url
 
 
@@ -40,29 +37,9 @@ class GitlabIssueViewSet(BaseViewSet):
     list_contains_fields = ['labels']
 
 
-class IssuePost(APIView):
+class IssuePost(GenericAPIView):
     permission_classes = (IsAuthenticated,)
-
-    schema = AutoSchema(manual_fields=[
-        coreapi.Field(
-            "title",
-            required=True,
-            location="title",
-            schema=coreschema.String()
-        ),
-        coreapi.Field(
-            "description",
-            required=True,
-            location="description",
-            schema=coreschema.String()
-        ),
-        coreapi.Field(
-            "label",
-            required=True,
-            location="label",
-            schema=coreschema.String()
-        ),
-    ])
+    serializer_class = IssuePostSerializer
 
     def post(self, request):
         """
@@ -95,26 +72,12 @@ class IssuePost(APIView):
 
         gi = get_or_create_gitlab_issue(res.json())
 
-        return Response(GitlabIssueSerializer(gi).data)
+        return Response(GitlabIssueSerializer(gi, context={'request': request}).data)
 
 
-class Thumbs(APIView):
+class Thumbs(GenericAPIView):
     permission_classes = (IsAuthenticated,)
-
-    schema = AutoSchema(manual_fields=[
-        coreapi.Field(
-            "issue_iid",
-            required=True,
-            location="issue_iid",
-            schema=coreschema.Integer()
-        ),
-        coreapi.Field(
-            "vote",
-            required=True,
-            location="vote",
-            schema=coreschema.Integer()
-        ),
-    ])
+    serializer_class = ThumbSerializer
 
     def post(self, request):
         if 'issue_iid' not in request.data or 'vote' not in request.data:

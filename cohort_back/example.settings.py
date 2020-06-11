@@ -224,9 +224,9 @@ PG_OMOP_PASS = "password"
 VOTING_GITLAB = {
     'enable': True,
     'api_url': 'https://gitlab.com/api/v4',
-    'project_name': 'cohort360%2Ffront-end',
-    'gitlab_private_token': 'xxxxxxxxx',
-    'authorized_labels': ['Backlog', 'To Do', 'Doing Back', 'Doing Front', 'Anomalie', 'Anomalies résolues',
-                          'Déploiement', 'Feature request', 'Bug request'],
+    'project_id': "490",
+    'project_name': 'cohort360%2Fuser_requests',
+    'gitlab_private_token': 'xxxx',
+    'authorized_labels': ['To Do', 'Doing', 'Feature request', 'Bug request'],
     'post_labels': ['Bug request', 'Feature request'],
 }
