@@ -50,13 +50,7 @@ The Swagger documentation is available at /docs/ when the server is running.
 ### Medical data
 
 Cohort back-end does not store any medical data.
-It only stores Patient ids for Cohorts.
-
-### Search with SolR
-
-1. Search criteria
-2. Execute requests (query with many organized criteria (and, or, not))
-
+It only stores OMOP/FHIR ressources ids.
 
 ### Modification d'un modèle
 
