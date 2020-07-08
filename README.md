@@ -45,6 +45,8 @@ You will then be able to get a JSON Web Token (JWT) to further authenticate to o
 
 ## Development
 
+The Swagger documentation is available at /docs/ when the server is running.
+
 ### Medical data
 
 Cohort back-end does not store any medical data.
