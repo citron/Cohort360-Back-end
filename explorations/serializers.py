@@ -112,7 +112,4 @@ class PerimeterSerializer(BaseSerializer):
 
     class Meta:
         model = Perimeter
-        fields = ("uuid", "created_at", "modified_at",
-                  "name", "description",
-                  "owner_id",
-                  "data_type", "fhir_query",)
+        fields = "__all__"
