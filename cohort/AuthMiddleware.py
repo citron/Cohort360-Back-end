@@ -15,24 +15,6 @@ class HttpResponseUnauthorized(HttpResponse):
     status_code = 401
 
 
-class AuthenticationMiddleware(MiddlewareMixin):
-    def process_request(self, request):
-
-        if 'Authorization' in request.META:
-            jwt_access_token = request.META['Authorization']
-
-            try:
-                payload = IDServer.verify_jwt(jwt_access_token)
-            except ValueError:
-                return HttpResponseUnauthorized('<h1>401 Invalid or expired JWT token</h1>', content_type='text/html')
-            try:
-                request.user = User.objects.get(username=payload['username'])
-            except ObjectDoesNotExist:
-                request.user = get_or_create_user(jwt_access_token=jwt_access_token)
-            return
-        return HttpResponseForbidden('<h1>403 Forbidden</h1>', content_type='text/html')
-
-
 class CustomAuthentication(BaseAuthentication):
     def authenticate(self, request):
         header = self.get_header(request)

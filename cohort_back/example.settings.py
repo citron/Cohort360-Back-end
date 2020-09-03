@@ -11,11 +11,7 @@ https://docs.djangoproject.com/en/2.1/ref/settings/
 """
 
 import os
-
-# Build paths inside the project like this: os.path.join(BASE_DIR, ...)
-
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.1/howto/deployment/checklist/
@@ -27,11 +23,14 @@ SECRET_KEY = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 DEBUG = True
 
 CORS_ORIGIN_ALLOW_ALL = DEBUG
+CORS_ORIGIN_WHITELIST = [
+    "https://cohort360.com",
+    "https://cohort360-back.com"
+]
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
-CSRF_TRUSTED_ORIGINS = ['cohort360.fr']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'cohort360-back.com']
 
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'http')
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Application definition
@@ -69,6 +68,10 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+AUTHENTICATION_BACKENDS = [
+    'cohort.backends.AuthBackend',
+]
+
 ROOT_URLCONF = 'cohort_back.urls'
 
 TEMPLATES = [
@@ -89,7 +92,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'cohort_back.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/2.1/ref/settings/#databases
 
@@ -99,7 +101,6 @@ DATABASES = {
         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/2.1/ref/settings/#auth-password-validators
@@ -138,15 +139,17 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/2.1/howto/static-files/
 
 STATIC_URL = '/static/'
+STATIC_ROOT = '/path/to/static/'
 
 AUTH_USER_MODEL = 'cohort.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
+        'cohort.permissions.AllowOptionsAuthentication',
     ),
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'cohort.AuthMiddleware.JWTAuthentication',
+        'cohort.AuthMiddleware.CustomAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
@@ -164,6 +167,35 @@ SWAGGER_SETTINGS = {
 
 APPEND_SLASH = False
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': '/path/to/cohort_back_prod.backend.debug.log',
+        },
+    },
+    'loggers': {
+#        'django': {
+#            'handlers': ['file'],
+#            'level': 'DEBUG',
+#            'propagate': True,
+#        },
+        'django.request': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        'info': {
+            'handlers': ["file"],
+            'level': 'DEBUG',
+            'propagate': True
+        },
+    },
+}
+
 # Celery
 CELERY_BROKER_URL = 'redis://localhost:6379'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379'
@@ -174,7 +206,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_BEAT_SCHEDULE = {
     'task-update-cohorts': {
         'task': 'cohort_back.celery.import_i2b2',
-        'schedule': 30
+        'schedule': 2
     },
     'task-update-gitlab-issues': {
         'task': 'cohort_back.celery.update_gitlab_issues',
@@ -192,9 +224,9 @@ PG_OMOP_PASS = "password"
 VOTING_GITLAB = {
     'enable': True,
     'api_url': 'https://gitlab.com/api/v4',
-    'project_name': 'cohort360%2Ffront-end',
-    'gitlab_private_token': 'xxxxxxxxx',
-    'authorized_labels': ['Backlog', 'To Do', 'Doing Back', 'Doing Front', 'Anomalie', 'Anomalies résolues',
-                          'Déploiement', 'Feature request', 'Bug request', 'None'],
+    'project_id': "490",
+    'project_name': 'cohort360%2Fuser_requests',
+    'gitlab_private_token': 'xxxx',
+    'authorized_labels': ['To Do', 'Doing', 'Feature request', 'Bug request'],
     'post_labels': ['Bug request', 'Feature request'],
 }

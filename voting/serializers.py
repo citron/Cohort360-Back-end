@@ -49,3 +49,15 @@ class GitlabIssueSerializer(BaseSerializer):
                   "title", "description",
                   "votes_positive_sum", "votes_neutral_sum", "votes_negative_sum", "votes_total_sum",
                   "user_vote",)
+
+
+class IssuePostSerializer(serializers.Serializer):
+    title = serializers.CharField(required=True)
+    description = serializers.CharField(required=True)
+    label = serializers.CharField(required=True)
+
+
+class ThumbSerializer(serializers.Serializer):
+    issue_iid = serializers.IntegerField(required=True)
+    vote = serializers.IntegerField(required=True)
+
