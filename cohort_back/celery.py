@@ -160,6 +160,11 @@ def import_i2b2():
         for cohort in cohorts:
             create_cohort(user, p1, explo, cohort, 'IMPORT_I2B2')
 
+        # Delete old i2b2 cohorts deleted in OMOP
+        Cohort.objects \
+            .filter(owner=user,  type='IMPORT_I2B2') \
+            .exclude(fhir_groups_ids__in=[doc['fhir_id'] for doc in cohorts]).delete()
+
         care_sites = get_user_care_sites_cohorts(user.username)
         created_cohorts = []
         for care_site in care_sites:
