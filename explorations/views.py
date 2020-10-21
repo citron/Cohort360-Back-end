@@ -7,12 +7,11 @@ from rest_framework.response import Response
 from rest_framework.schemas import AutoSchema
 from rest_framework.views import APIView
 
-from cohort.models import Perimeter
 from cohort.permissions import IsAdminOrOwner, OR, IsAdmin
 from cohort.views import UserObjectsRestrictedViewSet
-from explorations.models import Exploration, Request, Cohort, RequestQuerySnapshot, RequestQueryResult
-from explorations.serializers import ExplorationSerializer, RequestSerializer, CohortSerializer, \
-    RequestQuerySnapshotSerializer, RequestQueryResultSerializer, PerimeterSerializer
+from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure
+from explorations.serializers import RequestSerializer, CohortResultSerializer, \
+    RequestQuerySnapshotSerializer, DatedMeasureSerializer
 
 
 # Filtering/Ordering/Searching : https://www.django-rest-framework.org/api-guide/filtering/
@@ -23,36 +22,9 @@ from explorations.serializers import ExplorationSerializer, RequestSerializer, C
 # search_fields = ('user',) -> /api/users?search=russell
 
 
-class CohortViewSet(UserObjectsRestrictedViewSet):
-    queryset = Cohort.objects.all()
-    serializer_class = CohortSerializer
-    http_method_names = ['get', 'post', 'patch', 'delete']
-
-    filterset_fields = ('uuid', 'name', 'favorite',
-                        'request_query_snapshot_id',
-                        'request_id', 'perimeter_id', 'fhir_groups_ids', 'type')
-    ordering_fields = ('created_at', 'modified_at',
-                       'name', 'favorite', 'type', 'result_size')
-    ordering = ('-created_at',)
-    search_fields = ('$name', '$description',)
-
-    def get_permissions(self):
-        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
-            return OR(IsAdminOrOwner())
-
-    def create(self, request, *args, **kwargs):
-
-        user = request.user
-
-        if 'owner_id' not in request.data:
-            request.data['owner_id'] = str(user.uuid)
-
-        return super(CohortViewSet, self).create(request, *args, **kwargs)
-
-
-class RequestQueryResultViewSet(UserObjectsRestrictedViewSet):
-    queryset = RequestQueryResult.objects.all()
-    serializer_class = RequestQueryResultSerializer
+class DatedMeasureViewSet(UserObjectsRestrictedViewSet):
+    queryset = DatedMeasure.objects.all()
+    serializer_class = DatedMeasureSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
 
     filterset_fields = ('uuid',
@@ -69,7 +41,7 @@ class RequestQueryResultViewSet(UserObjectsRestrictedViewSet):
         if 'owner_id' not in request.data:
             request.data['owner_id'] = str(user.uuid)
 
-        return super(RequestQueryResultViewSet, self).create(request, *args, **kwargs)
+        return super(DatedMeasureViewSet, self).create(request, *args, **kwargs)
 
 
 class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
@@ -87,7 +59,6 @@ class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
             return OR(IsAdminOrOwner())
 
     def create(self, request, *args, **kwargs):
-
         user = request.user
 
         if 'owner_id' not in request.data:
@@ -97,29 +68,70 @@ class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
 
     @action(detail=True, methods=['get'])
     @permission_classes((IsAdminOrOwner,))
-    def generate_result(self, request_query_snapshot_uuid, perimeter_uuid):
+    def generate_result(self, request_query_snapshot_uuid):
         try:
             rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
-            p = Perimeter.objects.get(uuid=perimeter_uuid)
-        except (RequestQuerySnapshot.DoesNotExist, Perimeter.DoesNotExist):
-            return Response({"response": "request_query_snapshot or perimeter not found"},
+        except RequestQuerySnapshot.DoesNotExist:
+            return Response({"response": "request_query_snapshot not found"},
                             status=status.HTTP_404_NOT_FOUND)
-        rqr = rqs.generate_result(perimeter=p)
-        return Response({'response': "Query successful!", 'data': RequestQueryResultSerializer(rqr).data},
+        rqr = rqs.generate_result()
+        return Response({'response': "Query successful!", 'data': DatedMeasureSerializer(rqr).data},
                         status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    @permission_classes((IsAdminOrOwner,))
+    def generate_cohort(self, request_query_snapshot_uuid, name, description):
+        try:
+            rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
+        except RequestQuerySnapshot.DoesNotExist:
+            return Response({"response": "request_query_snapshot not found"},
+                            status=status.HTTP_404_NOT_FOUND)
+        c = rqs.generate_cohort(name, description)
+        return Response({'response': "Query successful!", 'data': CohortResultSerializer(c).data},
+                        status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    @permission_classes((IsAdminOrOwner,))
+    def save(self, request_query_snapshot_uuid):
+        try:
+            rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
+        except RequestQuerySnapshot.DoesNotExist:
+            return Response({"response": "request_query_snapshot not found"},
+                            status=status.HTTP_404_NOT_FOUND)
+        rqs.save_snapshot()
+        return Response({'response': "Query successful!"}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['get'])
     @permission_classes((IsAdminOrOwner,))
-    def generate_cohort(self, request_query_snapshot_uuid, perimeter_uuid, name, description):
+    def get_previous(self, request_query_snapshot_uuid):
         try:
             rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
-            p = Perimeter.objects.get(uuid=perimeter_uuid)
-        except (RequestQuerySnapshot.DoesNotExist, Perimeter.DoesNotExist):
-            return Response({"response": "request_query_snapshot or perimeter not found"},
+        except RequestQuerySnapshot.DoesNotExist:
+            return Response({"response": "request_query_snapshot not found"},
                             status=status.HTTP_404_NOT_FOUND)
-        c = rqs.generate_cohort(name, description, perimeter=p)
-        return Response({'response': "Query successful!", 'data': CohortSerializer(c).data},
-                        status=status.HTTP_200_OK)
+        prvs = rqs.previous_snapshot
+        if prvs is None:
+            return Response({'response': "request_query_snapshot has no previous snapshot"},
+                            status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'response': "Query successful!", 'data': prvs},
+                            status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    @permission_classes((IsAdminOrOwner,))
+    def get_next(self, request_query_snapshot_uuid):
+        try:
+            rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
+        except RequestQuerySnapshot.DoesNotExist:
+            return Response({"response": "request_query_snapshot not found"},
+                            status=status.HTTP_404_NOT_FOUND)
+        nxt = rqs.active_next_snapshot
+        if nxt is None:
+            return Response({'response': "request_query_snapshot has no active next snapshot"},
+                            status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'response': "Query successful!", 'data': nxt},
+                            status=status.HTTP_200_OK)
 
 
 class RequestViewSet(UserObjectsRestrictedViewSet):
@@ -147,16 +159,30 @@ class RequestViewSet(UserObjectsRestrictedViewSet):
 
         return super(RequestViewSet, self).create(request, *args, **kwargs)
 
+    @action(detail=True, methods=['post'])
+    @permission_classes((IsAdminOrOwner,))
+    def get_status(self, cohort_result_uuid):
+        try:
+            cr = CohortResult.objects.get(uuid=cohort_result_uuid)
+        except CohortResult.DoesNotExist:
+            return Response({"response": "CohortResult not found"},
+                            status=status.HTTP_404_NOT_FOUND)
+        r = cr.check_request_status()
+        return Response({'response': "Query successful!", 'data': r},
+                        status=status.HTTP_200_OK)
 
-class ExplorationViewSet(UserObjectsRestrictedViewSet):
-    queryset = Exploration.objects.all()
-    serializer_class = ExplorationSerializer
+
+class CohortViewSet(UserObjectsRestrictedViewSet):
+    queryset = CohortResult.objects.all()
+    serializer_class = CohortResultSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
 
-    filterset_fields = ('uuid', 'name', 'favorite', 'owner_id',)
+    filterset_fields = ('uuid', 'name', 'favorite',
+                        'request_query_snapshot_id',
+                        'request_id', 'perimeter_id', 'fhir_groups_ids', 'type')
     ordering_fields = ('created_at', 'modified_at',
-                       'name', 'description', 'favorite', 'owner_id',)
-    ordering = ('name',)
+                       'name', 'favorite', 'type', 'result_size')
+    ordering = ('-created_at',)
     search_fields = ('$name', '$description',)
 
     def get_permissions(self):
@@ -170,34 +196,7 @@ class ExplorationViewSet(UserObjectsRestrictedViewSet):
         if 'owner_id' not in request.data:
             request.data['owner_id'] = str(user.uuid)
 
-        return super(ExplorationViewSet, self).create(request, *args, **kwargs)
-
-
-class PerimeterViewSet(UserObjectsRestrictedViewSet):
-    queryset = Perimeter.objects.all()
-    serializer_class = PerimeterSerializer
-    http_method_names = ['get', 'post', 'patch', 'delete']
-
-    filterset_fields = ('uuid', 'name', 'data_type', 'owner_id',)
-    ordering_fields = ('created_at', 'modified_at',
-                       'name', 'description', 'data_type', 'owner_id',)
-    ordering = ('name',)
-    search_fields = ('$name', '$description', '$fhir_query')
-
-    def get_permissions(self):
-        if self.request.method in ['POST', 'PATCH', 'DELETE']:
-            return OR(IsAdmin())
-        elif self.request.method == 'GET':
-            return OR(IsAdminOrOwner())
-
-    def create(self, request, *args, **kwargs):
-
-        user = request.user
-
-        if 'owner_id' not in request.data:
-            request.data['owner_id'] = str(user.uuid)
-
-        return super(PerimeterViewSet, self).create(request, *args, **kwargs)
+        return super(CohortViewSet, self).create(request, *args, **kwargs)
 
 
 class SearchCriteria(APIView):

@@ -212,6 +212,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'cohort_back.celery.update_gitlab_issues',
         'schedule': 10
     },
+    'get_pending_jobs_status': {
+        'task': 'cohort_back.celery.get_pending_jobs_status',
+        'schedule': 5
+    }
 }
 
 

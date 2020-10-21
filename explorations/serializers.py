@@ -1,115 +1,61 @@
 from rest_framework import serializers
 
-from cohort.models import User, Perimeter
+from cohort.models import User
 from cohort.serializers import BaseSerializer
-from explorations.models import Exploration, Request, Cohort, RequestQuerySnapshot, RequestQueryResult
+from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure
 
 
-class CohortSerializer(BaseSerializer):
-    name = serializers.CharField(max_length=30)
-    description = serializers.CharField(required=False)
-
+class CohortResultSerializer(BaseSerializer):
     request_query_snapshot_id = serializers.PrimaryKeyRelatedField(source='request_query_snapshot',
                                                                    queryset=RequestQuerySnapshot.objects.all())
     request_id = serializers.PrimaryKeyRelatedField(source='request', queryset=Request.objects.all())
-    perimeter_id = serializers.PrimaryKeyRelatedField(source='perimeter', queryset=Perimeter.objects.all())
-
-    fhir_groups_ids = serializers.CharField(read_only=True)
-
-    type = serializers.CharField(read_only=True)
-
-    result_size = serializers.IntegerField(read_only=True)
-
     owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
+    result_size = serializers.IntegerField()
 
     class Meta:
-        model = Cohort
-        fields = ("uuid", "created_at", "modified_at",
-                  "name", "description", 'favorite',
-                  "request_query_snapshot_id", "request_id", "perimeter_id",
-                  "result_size",
-                  "fhir_groups_ids", "type",
-                  "owner_id",)
+        model = CohortResult
+        excluded = ["owner", "request"]
+        read_only_fields = ["type", "result_size"]
 
 
-class RequestQueryResultSerializer(BaseSerializer):
+class DatedMeasureSerializer(BaseSerializer):
     request_query_snapshot_id = serializers.PrimaryKeyRelatedField(source='request_query_snapshot',
                                                                    queryset=RequestQuerySnapshot.objects.all())
     request_id = serializers.PrimaryKeyRelatedField(source='request', queryset=Request.objects.all())
-    perimeter_id = serializers.PrimaryKeyRelatedField(source='perimeter', queryset=Perimeter.objects.all())
-
-    result_size = serializers.IntegerField(read_only=True)
-
-    refresh_every_seconds = serializers.IntegerField(required=False)
-    refresh_create_cohort = serializers.BooleanField(required=False)
-
     owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
 
     class Meta:
-        model = RequestQueryResult
-        fields = ("uuid", "created_at", "modified_at",
-                  "request_query_snapshot_id", "request_id", "perimeter_id",
-                  "result_size",
-                  "refresh_every_seconds", "refresh_create_cohort",
-                  "owner_id",)
+        model = DatedMeasure
+        excluded = ["request_query_snapshot", "request", "owner"]
 
 
 class RequestQuerySnapshotSerializer(BaseSerializer):
     request_id = serializers.PrimaryKeyRelatedField(source='request', queryset=Request.objects.all())
-    serialized_query = serializers.CharField(required=False)
-
     owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
+    previous_snapshot_id = serializers.PrimaryKeyRelatedField(
+        source='previous_snapshot', queryset=RequestQuerySnapshot.objects.all(), required=False
+    )
+    next_snapshot_id = serializers.PrimaryKeyRelatedField(source='active_next_snapshot', read_only=True)
 
     class Meta:
         model = RequestQuerySnapshot
-        fields = ("uuid", "created_at", "modified_at",
-                  "request_id", "serialized_query",
-                  "owner_id",)
+        fields = "__all__"
+        excluded = ["request", "owner"]
+        read_only_fields = ["is_active_branch"]
+
+    def create(self, validated_data):
+        previous_snapshot_id = validated_data.get("previous_snapshot_id", None)
+        if previous_snapshot_id is not None:
+            previous_snapshot = RequestQuerySnapshot.objects.get(uuid=previous_snapshot_id)
+            for rqs in previous_snapshot.next_snapshots:
+                rqs.active = False
+                rqs.save()
+        return super(RequestQuerySnapshotSerializer, self).create(validated_data=validated_data)
 
 
 class RequestSerializer(BaseSerializer):
-    name = serializers.CharField(max_length=30)
-    description = serializers.CharField(required=False)
-    favorite = serializers.BooleanField(required=False)
-
-    exploration_id = serializers.PrimaryKeyRelatedField(source='exploration', queryset=Exploration.objects.all())
-
-    data_type_of_query = serializers.ChoiceField(Request.REQUEST_DATA_TYPE_CHOICES)
-
     owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
 
     class Meta:
         model = Request
-        fields = ("uuid", "created_at", "modified_at",
-                  "name", "description", "favorite",
-                  "exploration_id",
-                  "data_type_of_query",
-                  "owner_id",)
-
-
-class ExplorationSerializer(BaseSerializer):
-    name = serializers.CharField(max_length=30)
-    description = serializers.CharField(required=False)
-    favorite = serializers.BooleanField(required=False)
-
-    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
-
-    class Meta:
-        model = Exploration
-        fields = ("uuid", "created_at", "modified_at",
-                  "name", "description", "favorite",
-                  "owner_id",)
-
-
-class PerimeterSerializer(BaseSerializer):
-    name = serializers.CharField(max_length=30)
-    description = serializers.CharField(required=False)
-
-    data_type = serializers.ChoiceField(choices=Perimeter.PERIMETER_DATA_TYPE_CHOICES)
-    fhir_query = serializers.CharField()
-
-    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all())
-
-    class Meta:
-        model = Perimeter
-        fields = "__all__"
+        excluded = ["owner"]
