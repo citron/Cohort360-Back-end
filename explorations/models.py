@@ -3,10 +3,11 @@ from datetime import date
 
 from django.apps import apps
 
-from cohort.models import BaseModel, User
+from cohort.models import User
 from django.db import models
 
 from cohort_back.FhirAPi import send_cohort_query, check_cohort_status, retrieve_cohort_result, send_cohort_count_query
+from cohort_back.models import BaseModel
 
 REQUEST_STATUS_CHOICES = [
     ("pending", "pending"),
@@ -28,6 +29,7 @@ COHORT_TYPE_CHOICES = [
 I2B2_COHORT_TYPE = COHORT_TYPE_CHOICES[0][0]
 MY_ORGANISATIONS_COHORT_TYPE = COHORT_TYPE_CHOICES[1][0]
 MY_PATIENTS_COHORT_TYPE = COHORT_TYPE_CHOICES[2][0]
+MY_COHORTS_COHORT_TYPE = COHORT_TYPE_CHOICES[3][0]
 
 REQUEST_DATA_TYPE_CHOICES = [
     ("PATIENT", 'FHIR Patient'),
@@ -134,7 +136,7 @@ class DatedMeasure(BaseModel):
     request = models.ForeignKey(Request, on_delete=models.CASCADE)
 
     fhir_datetime = models.DateTimeField(null=False, blank=False)
-    measure = models.BigIntegerField()  # Size of potential cohort as returned by SolR
+    measure = models.BigIntegerField(null=False, blank=False)  # Size of potential cohort as returned by SolR
     # perimeter = models.ForeignKey(Perimeter, on_delete=models.CASCADE)
 
     # result_size = models.BigIntegerField()  # Number of results as returned by SolR
@@ -150,7 +152,7 @@ class CohortResult(BaseModel):
     request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE)
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='request_cohorts')
 
-    fhir_group_id = models.BigIntegerField(blank=True)
+    fhir_group_id = models.CharField(max_length=64, blank=True)
     dated_measure = models.ForeignKey(DatedMeasure, related_name="cohort", on_delete=models.PROTECT)
 
     request_job_id = models.TextField(blank=True)
@@ -158,7 +160,7 @@ class CohortResult(BaseModel):
                                           default=PENDING_REQUEST_STATUS)
 
     # will depend on the right (pseudo-anonymised or nominative) you have on the care_site
-    type = models.CharField(max_length=20, choices=COHORT_TYPE_CHOICES)
+    type = models.CharField(max_length=20, choices=COHORT_TYPE_CHOICES, default=MY_COHORTS_COHORT_TYPE)
     # rqr = models.ForeignKey(RequestResult, on_delete=models.CASCADE)
 
     class Meta:
