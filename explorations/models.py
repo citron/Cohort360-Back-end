@@ -45,23 +45,26 @@ class Request(BaseModel):
 
     data_type_of_query = models.CharField(max_length=9, choices=REQUEST_DATA_TYPE_CHOICES, default=PATIENT_REQUEST_TYPE)
 
-    saved_snapshot = models.ForeignKey("RequestQuerySnapshot", on_delete=models.SET_NULL, null=True, default=None)
-
     def last_request_snapshot(self):
         return RequestQuerySnapshot.objects.filter(request__uuid=self.uuid).latest('created_at')
+
+    def saved_snapshot(self):
+        return self.query_snapshots.filter(saved=True).first()
 
 
 class RequestQuerySnapshot(BaseModel):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_request_query_snapshots')
-    request = models.ForeignKey(Request, on_delete=models.CASCADE)
+    request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='query_snapshots')
 
     serialized_query = models.TextField(default="{}")
     refresh_every_seconds = models.BigIntegerField(default=0)
     # refresh_intervale_seconds = models.BigIntegerField(default=0)
     refresh_create_cohort = models.BooleanField(default=False)
 
-    previous_snapshot = models.ForeignKey("RequestQuerySnapshot", related_name="next_snapshots")
+    previous_snapshot = models.ForeignKey("RequestQuerySnapshot", related_name="next_snapshots",
+                                          on_delete=models.SET_NULL, null=True)
     is_active_branch = models.BooleanField(default=True)
+    saved = models.BooleanField(default=False)
 
     @property
     def active_next_snapshot(self):
@@ -83,8 +86,13 @@ class RequestQuerySnapshot(BaseModel):
         super(RequestQuerySnapshot, self).save(*args, **kwargs)
 
     def save_snapshot(self):
-        self.request.saved_snapshot = self
-        self.request.save()
+        previous_saved = self.request.saved_snapshot
+        if previous_saved is not None:
+            previous_saved.saved = False
+            previous_saved.save()
+
+        self.saved = True
+        self.save()
 
     def generate_result(self):
         result = send_cohort_count_query(str(self.serialized_query))

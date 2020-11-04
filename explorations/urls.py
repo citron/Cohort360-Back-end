@@ -27,5 +27,4 @@ router.register(r'cohorts', CohortResultViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
-    path("explorations/", include('explorations.urls')),
 ]
