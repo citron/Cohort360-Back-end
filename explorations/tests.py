@@ -6,17 +6,9 @@ from django.utils.datetime_safe import datetime
 from rest_framework import status
 from rest_framework.test import force_authenticate
 
-from accesses.models import IS_PART_OF_RELATONSHIP_ID, CONTAINS_RELATIONSHIP_ID, \
-    CARE_SITE_DOMAIN_CONCEPT_ID, CareSiteHistory, get_all_level_children_cs_ids, \
-    get_direct_children_cs_ids, get_direct_parent_care_site_ids, get_all_root_care_sites_ids, \
-    get_all_cs_to_cs_relationships, get_current_user_roles_on_care_site, get_all_user_roles_on_care_site, \
-    user_is_main_admin, get_all_current_accessible_care_sites_ids
-from accesses.views import CareSiteHistoryViewset
-from admin_cohort.settings import CARE_SITE_HISTORY_DOMAIN_ID_DEFAULT, MODEL_MANUAL_START_DATE_DEFAULT_ON_UPDATE, \
-    MODEL_MANUAL_END_DATE_DEFAULT_ON_UPDATE
-from admin_cohort.tests import BaseTests
-from other_models.models import FactRelationship
-from users.models import CareSite
+from cohort_back.tests import BaseTests
+from explorations.models import Request, RequestQuerySnapshot, DatedMeasure, CohortResult
+from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet, DatedMeasureViewSet, CohortResultViewSet
 
 
 class ObjectView(object):
@@ -24,781 +16,1029 @@ class ObjectView(object):
         self.__dict__ = d
 
 
-def create_caresite_ispartof_relationship(cs1: CareSite, cs2: CareSite) -> FactRelationship:
-    return FactRelationship.objects.create(
-        hash=0,
-        domain_concept_id_1=CARE_SITE_DOMAIN_CONCEPT_ID,
-        fact_id_1=cs1.care_site_id,
-        domain_concept_id_2=CARE_SITE_DOMAIN_CONCEPT_ID,
-        fact_id_2=cs2.care_site_id,
-        relationship_concept_id=IS_PART_OF_RELATONSHIP_ID,
-        row_id=0,
-    )
+EXPLORATIONS_URL = "/explorations"
+REQUESTS_URL = f"{EXPLORATIONS_URL}/requests"
+RQS_URL = f"{EXPLORATIONS_URL}/request-query-snapshots"
+DATED_MEASURES_URL = f"{EXPLORATIONS_URL}/dated-measures"
+COHORTS_URL = f"{EXPLORATIONS_URL}/cohorts"
+
+# TODO: test for CohortResult
+# TODO : test for rqs get_previous, get_next, save?,
+# TODO : make test for create/get Request's Rqs, Rqs' dated_measure, Rqs' cohortresult
 
 
-def create_caresite_contains_relationship(cs1: CareSite, cs2: CareSite) -> FactRelationship:
-    return FactRelationship.objects.create(
-        hash=0,
-        domain_concept_id_1=CARE_SITE_DOMAIN_CONCEPT_ID,
-        fact_id_1=cs1.care_site_id,
-        domain_concept_id_2=CARE_SITE_DOMAIN_CONCEPT_ID,
-        fact_id_2=cs2.care_site_id,
-        relationship_concept_id=CONTAINS_RELATIONSHIP_ID,
-        row_id=0,
-    )
-
-
-class ModelsUnitTest(BaseTests):
-    def setUp(self):
-        #      cs
-        #     /  \
-        # cs11   cs12
-        #   |    /   \
-        # cs21 cs22 cs23
-        #   | \    /  |
-        # cs31 cs32 cs33
-        super(ModelsUnitTest, self).setUp()
-        [self.cs, self.cs11, self.cs12, self.cs21, self.cs22, self.cs23, self.cs31, self.cs32, self.cs33] \
-            = [CareSite.objects.create(hash=0, row_id=0, care_site_id=_id) for _id in
-               [10, 11, 12, 21, 22, 23, 31, 32, 33]]
-        self.rel_31_21 = create_caresite_ispartof_relationship(self.cs31, self.cs21)
-        self.rel_22_12 = create_caresite_ispartof_relationship(self.cs22, self.cs12)
-        self.rel_23_12 = create_caresite_ispartof_relationship(self.cs23, self.cs12)
-
-        self.rel_11_10 = create_caresite_ispartof_relationship(self.cs11, self.cs)
-        self.rel_33_23 = create_caresite_ispartof_relationship(self.cs33, self.cs23)
-        self.rel_32_23 = create_caresite_ispartof_relationship(self.cs32, self.cs23)
-        self.rel_10_11 = create_caresite_contains_relationship(self.cs, self.cs11)
-        self.rel_23_33 = create_caresite_contains_relationship(self.cs23, self.cs33)
-        self.rel_23_32 = create_caresite_contains_relationship(self.cs23, self.cs32)
-
-        self.rel_11_21 = create_caresite_contains_relationship(self.cs11, self.cs21)
-        self.rel_21_32 = create_caresite_contains_relationship(self.cs21, self.cs32)
-        self.rel_10_12 = create_caresite_contains_relationship(self.cs, self.cs12)
-
-        self.cs_history_10_admin = CareSiteHistory.objects.create(
-            hash=0,
-            care_site_history_id=10,
-            row_id=0,
-            care_site_id=self.cs.care_site_id,
-            role_id=self.main_admin_role.role_id,
-            entity_id=self.admin_provider.provider_id,
-        )
-        self.cs_history_12_1_loc_admin = CareSiteHistory.objects.create(
-            hash=0,
-            care_site_history_id=1210,
-            row_id=0,
-            care_site_id=self.cs12.care_site_id,
-            role_id=self.local_admin_role.role_id,
-            entity_id=self.provider1.provider_id,
-        )
-        self.cs_history_12_1_pseudo = CareSiteHistory.objects.create(
-            hash=0,
-            care_site_history_id=1211,
-            row_id=0,
-            care_site_id=self.cs12.care_site_id,
-            role_id=self.pseudo_anonymised_data_role.role_id,
-            entity_id=self.provider1.provider_id,
-        )
-        self.cs_history_33_1_nominative = CareSiteHistory.objects.create(
-            hash=0,
-            care_site_history_id=331,
-            row_id=0,
-            care_site_id=self.cs33.care_site_id,
-            role_id=self.nominative_data_role.role_id,
-            entity_id=self.provider1.provider_id,
-        )
-        self.cs_history_23_1_outdated = CareSiteHistory.objects.create(
-            hash=0,
-            care_site_history_id=2310,
-            row_id=0,
-            care_site_id=self.cs23.care_site_id,
-            role_id=self.local_admin_role.role_id,
-            entity_id=self.provider1.provider_id,
-            end_date=datetime.now() - timedelta(days=2)
-        )
-        self.cs_history_23_1_not_started = CareSiteHistory.objects.create(
-            hash=0,
-            care_site_history_id=2311,
-            row_id=0,
-            care_site_id=self.cs23.care_site_id,
-            role_id=self.local_admin_role.role_id,
-            entity_id=self.provider1.provider_id,
-            start_date=datetime.now() + timedelta(days=2)
-        )
-        self.cs_history_21_1_not_started = CareSiteHistory.objects.create(
-            hash=0,
-            care_site_history_id=211,
-            row_id=0,
-            care_site_id=self.cs23.care_site_id,
-            role_id=self.local_admin_role.role_id,
-            entity_id=self.provider1.provider_id,
-            start_date=datetime.now() + timedelta(days=2)
-        )
-        self.deleted_cs = CareSiteHistory.objects.create(
-            hash=0,
-            care_site_history_id=999,
-            row_id=0,
-            care_site_id=self.cs23.care_site_id,
-            role_id=self.local_admin_role.role_id,
-            entity_id=self.provider1.provider_id,
-            start_date=datetime.now() + timedelta(days=2),
-            delete_datetime=timezone.now()
-        )
-
-    def check_cs_list(self, cs_found, cs_to_find):
-        cs_to_find_ids = [cs.care_site_id for cs in cs_to_find]
-        msg = "\n".join(["", "got", str(cs_found), "should be", str(cs_to_find_ids)])
-        for i in cs_to_find_ids:
-            self.assertIn(i, cs_found, msg=msg)
-        self.assertEqual(len(cs_found), len(cs_to_find), msg=msg)
-
-    def check_rel_list(self, rel_found, rel_to_find):
-        rel_to_find_ids = [rel.fact_relationship_id for rel in rel_to_find]
-        msg = "\n".join(["", "got", str(rel_found), "should be", str(rel_to_find_ids)])
-        for i in rel_to_find_ids:
-            self.assertIn(i, rel_found, msg=msg)
-        self.assertEqual(len(rel_found), len(rel_to_find), msg=msg)
-
-    def check_role_list(self, roles_found, roles_to_find):
-        roles_found_ids = [r.role_id for r in roles_found]
-        roles_to_find_ids = [role.role_id for role in roles_to_find]
-        msg = "\n".join(["", "got", str(roles_found_ids), "should be", str(roles_to_find_ids)])
-        for i in roles_to_find_ids:
-            self.assertIn(i, roles_found_ids, msg=msg)
-        self.assertEqual(len(roles_found), len(roles_to_find), msg=msg)
-
-    def test_not_retrieve_deleted_objects(self):
-        cs_hs = CareSiteHistory.objects.all()
-        self.assertNotIn(self.deleted_cs.care_site_history_id, [cs_h.care_site_history_id for cs_h in cs_hs])
-
-        cs_h = CareSiteHistory.objects.filter(
-            care_site_history_id=self.deleted_cs.care_site_history_id).first()
-        self.assertIsNone(cs_h)
-
-        self.assertRaises(
-            CareSiteHistory.DoesNotExist,
-            CareSiteHistory.objects.get,
-            care_site_history_id=self.deleted_cs.care_site_history_id)
-
-    def test_retrieve_deleted_objects_with_arg_even_deleted(self):
-        cs_hs = CareSiteHistory.objects.all(even_deleted=True)
-        self.assertIn(self.deleted_cs.care_site_history_id, [cs_h.care_site_history_id for cs_h in cs_hs])
-
-        cs_h = CareSiteHistory.objects.filter(even_deleted=True,
-                                              care_site_history_id=self.deleted_cs.care_site_history_id).first()
-        self.assertIsNotNone(cs_h)
-
-        cs_h = CareSiteHistory.objects.get(even_deleted=True,
-                                           care_site_history_id=self.deleted_cs.care_site_history_id)
-        self.assertIsNotNone(cs_h)
-
-    def test_user_admin_is_main_admin(self):
-        self.assertTrue(user_is_main_admin(self.admin_provider.provider_id))
-
-    def test_user_admin_is_main_admin_with_manual_dates(self):
-        self.cs_history_10_admin.start_date = datetime.now().date() + timedelta(days=2)
-        self.cs_history_10_admin.end_date = datetime.now().date() + timedelta(days=3)
-        self.cs_history_10_admin.save()
-        self.assertFalse(user_is_main_admin(self.admin_provider.provider_id))
-
-        self.cs_history_10_admin.manual_start_date = datetime.now().date() - timedelta(days=2)
-        self.cs_history_10_admin.manual_end_date = datetime.now().date() + timedelta(days=2)
-        self.cs_history_10_admin.save()
-        self.assertTrue(user_is_main_admin(self.admin_provider.provider_id))
-
-        self.cs_history_10_admin.manual_start_date = datetime.now().date() - timedelta(days=2)
-        self.cs_history_10_admin.manual_end_date = None
-        self.cs_history_10_admin.save()
-        self.assertTrue(user_is_main_admin(self.admin_provider.provider_id))
-
-        self.cs_history_10_admin.end_date = None
-        self.cs_history_10_admin.save()
-        self.assertTrue(user_is_main_admin(self.admin_provider.provider_id))
-
-        self.cs_history_10_admin.end_date = datetime.now().date() - timedelta(days=1)
-        self.cs_history_10_admin.save()
-        self.assertFalse(user_is_main_admin(self.admin_provider.provider_id))
-
-        self.cs_history_10_admin.end_date = datetime.now().date() + timedelta(days=3)
-        self.cs_history_10_admin.save()
-        self.assertTrue(user_is_main_admin(self.admin_provider.provider_id))
-
-    def test_user_1_is_not_main_admin(self):
-        self.assertFalse(user_is_main_admin(self.provider1.provider_id))
-
-    def test_get_all_cs_to_cs_relationships(self):
-        rel_found = get_all_cs_to_cs_relationships()
-        rel_found = [rel.fact_relationship_id for rel in rel_found.all()]
-        rel_to_find = [self.rel_31_21, self.rel_22_12, self.rel_23_12, self.rel_11_10, self.rel_33_23,
-                       self.rel_32_23, self.rel_10_11, self.rel_23_33, self.rel_23_32, self.rel_11_21,
-                       self.rel_21_32, self.rel_10_12, self.hospital_1_part_of_aphp_relationship,
-                       self.hospital_2_part_of_aphp_relationship, self.hospital_2_contains_3_relationship]
-        self.check_rel_list(rel_found, rel_to_find)
-
-    def test_get_direct_children_cs_ids_0(self):
-        cs_found = get_direct_children_cs_ids(care_site_id=self.cs.care_site_id)
-        cs_to_find = [self.cs11, self.cs12]
-        self.check_cs_list(cs_found, cs_to_find)
-
-    def test_get_all_level_children_cs_ids_12(self):
-        cs_found = get_all_level_children_cs_ids(care_site_ids=self.cs12.care_site_id)
-        cs_to_find = [self.cs12, self.cs22, self.cs23, self.cs32, self.cs33]
-        self.check_cs_list(cs_found, cs_to_find)
-
-    def test_get_all_level_children_cs_ids_11_23(self):
-        cs_found = get_all_level_children_cs_ids(care_site_ids=[self.cs11.care_site_id, self.cs23.care_site_id])
-        cs_to_find = [self.cs11, self.cs21, self.cs23, self.cs31, self.cs32, self.cs33]
-        self.check_cs_list(cs_found, cs_to_find)
-
-    def test_get_direct_parent_care_site_ids_32(self):
-        cs_found = get_direct_parent_care_site_ids(care_site_id=self.cs32.care_site_id)
-        cs_to_find = [self.cs21, self.cs23]
-        self.check_cs_list(cs_found, cs_to_find)
-
-    def test_get_all_root_care_sites_ids_32(self):
-        cs_found = get_all_root_care_sites_ids(care_site_ids=self.cs32.care_site_id)
-        cs_to_find = [self.cs32, self.cs21, self.cs23, self.cs11, self.cs12, self.cs]
-        self.check_cs_list(cs_found, cs_to_find)
-
-    def test_get_all_root_care_sites_ids_21_23(self):
-        cs_found = get_all_root_care_sites_ids(care_site_ids=[self.cs21.care_site_id, self.cs23.care_site_id])
-        cs_to_find = [self.cs21, self.cs23, self.cs11, self.cs12, self.cs]
-        self.check_cs_list(cs_found, cs_to_find)
-
-    def test_get_current_user_1_access_on_care_site_12(self):
-        roles_found = get_current_user_roles_on_care_site(provider_id=self.provider1.provider_id,
-                                                          care_site_id=self.cs12.care_site_id)
-        roles_to_find = [self.local_admin_role, self.pseudo_anonymised_data_role]
-        self.check_role_list(roles_found, roles_to_find)
-
-    def test_get_current_user_1_access_on_care_site_23(self):
-        roles_found = get_current_user_roles_on_care_site(provider_id=self.provider1.provider_id,
-                                                          care_site_id=self.cs23.care_site_id)
-        roles_to_find = []
-        self.check_role_list(roles_found, roles_to_find)
-
-    def test_get_all_user_admin_roles_on_care_site_10(self):
-        roles_found = get_all_user_roles_on_care_site(provider_id=self.admin_provider.provider_id,
-                                                      care_site_id=self.cs.care_site_id)
-        roles_to_find = [self.main_admin_role]
-        self.check_role_list(roles_found, roles_to_find)
-
-    def test_get_all_user_admin_roles_on_care_site_31(self):
-        roles_found = get_all_user_roles_on_care_site(provider_id=self.admin_provider.provider_id,
-                                                      care_site_id=self.cs31.care_site_id)
-        roles_to_find = [self.main_admin_role]
-        self.check_role_list(roles_found, roles_to_find)
-
-    def test_get_all_user_1_roles_on_care_site_1(self):
-        roles_found = get_all_user_roles_on_care_site(provider_id=self.provider1.provider_id,
-                                                      care_site_id=self.cs.care_site_id)
-        roles_to_find = []
-        self.check_role_list(roles_found, roles_to_find)
-
-    def test_get_all_user_1_roles_on_care_site_31(self):
-        roles_found = get_all_user_roles_on_care_site(provider_id=self.provider1.provider_id,
-                                                      care_site_id=self.cs31.care_site_id)
-        roles_to_find = []
-        self.check_role_list(roles_found, roles_to_find)
-
-    def test_get_all_user_1_roles_on_care_site_32(self):
-        roles_found = get_all_user_roles_on_care_site(provider_id=self.provider1.provider_id,
-                                                      care_site_id=self.cs32.care_site_id)
-        roles_to_find = [self.local_admin_role, self.pseudo_anonymised_data_role]
-        self.check_role_list(roles_found, roles_to_find)
-
-    def test_get_all_user_1_roles_on_care_site_33(self):
-        roles_found = get_all_user_roles_on_care_site(provider_id=self.provider1.provider_id,
-                                                      care_site_id=self.cs33.care_site_id)
-        roles_to_find = [self.local_admin_role, self.pseudo_anonymised_data_role, self.nominative_data_role]
-        self.check_role_list(roles_found, roles_to_find)
-
-    def test_get_all_current_accessible_care_sites_ids_admin(self):
-        cs_found = get_all_current_accessible_care_sites_ids(provider_id=self.admin_provider.provider_id)
-        cs_to_find = [self.cs, self.cs11, self.cs12, self.cs21, self.cs22, self.cs23, self.cs31, self.cs32, self.cs33]
-        self.check_cs_list(cs_found, cs_to_find)
-
-    def test_get_all_current_accessible_care_sites_ids_1(self):
-        cs_found = get_all_current_accessible_care_sites_ids(provider_id=self.provider1.provider_id)
-        cs_to_find = [self.cs12, self.cs22, self.cs23, self.cs32, self.cs33]
-        self.check_cs_list(cs_found, cs_to_find)
-
-    def test_get_all_current_accessible_care_sites_ids_2(self):
-        cs_found = get_all_current_accessible_care_sites_ids(provider_id=self.provider2.provider_id)
-        cs_to_find = []
-        self.check_cs_list(cs_found, cs_to_find)
-
-
-class CareSiteHistoryTests(BaseTests):
-    unupdatable_fields = ["role_id", "start_date", "end_date", "care_site_id", "entity_id"]
-    unsettable_default_fields = dict(
-        change_datetime=None,
-        role_source_id=None,
-        role_source_value=None,
-        cdm_source=None,
-        domain_id=CARE_SITE_HISTORY_DOMAIN_ID_DEFAULT,
-        relationship_type_concept_id=None,
-    )
-    unsettable_fields = ["care_site_history_id"]
+# REQUESTS
+class RequestsTests(BaseTests):
+    def check_requests_response(self, response, req_to_find):
+        req_found = [ObjectView(csh) for csh in self.get_response_payload(response)["results"]]
+        req_found_ids = [req.uuid for req in req_found]
+        req_to_find_ids = [req.uuid for req in req_to_find]
+        msg = "\n".join(["", "got", str(req_found_ids), "should be", str(req_to_find_ids)])
+        for i in req_to_find_ids:
+            self.assertIn(i, req_found_ids, msg=msg)
+        self.assertEqual(len(req_found_ids), len(req_to_find), msg=msg)
 
     def setUp(self):
-        super(CareSiteHistoryTests, self).setUp()
-        #         main_admin(aphp)
-        #        /    \
-        # u1admin(h1)  u2pseudo+admin(h2)
-        #                |
-        #             u1pseudo(h3)
-        self.admin_access = CareSiteHistory.objects.create(
-            hash=0,
-            row_id=0,
-            care_site_id=self.aphp.care_site_id,
-            role_id=self.main_admin_role.role_id,
-            entity_id=self.admin_provider.provider_id,
+        super(RequestsTests, self).setUp()
+        self.user1_req1 = Request(
+            owner=self.user1,
+            name="Request 1",
+            description=" Request 1 from user 1",
         )
-        self.access_user1_admin_h1 = CareSiteHistory.objects.create(
-            hash=0,
-            row_id=0,
-            care_site_id=self.hospital1.care_site_id,
-            role_id=self.local_admin_role.role_id,
-            entity_id=self.provider1.provider_id,
+        self.user1_req1.save()
+
+        self.user2_req1 = Request(
+            owner=self.user2,
+            name="Request 1",
+            description=" Request 1 from user 2",
         )
-        self.access_user1_pseudo_h3 = CareSiteHistory.objects.create(
-            hash=0,
-            row_id=0,
-            care_site_id=self.hospital3.care_site_id,
-            role_id=self.pseudo_anonymised_data_role.role_id,
-            entity_id=self.provider1.provider_id,
-        )
-        self.access_user2_pseudo_h2 = CareSiteHistory.objects.create(
-            hash=0,
-            row_id=0,
-            care_site_id=self.hospital2.care_site_id,
-            role_id=self.pseudo_anonymised_data_role.role_id,
-            entity_id=self.provider2.provider_id,
-        )
-        self.access_user2_admin_h2 = CareSiteHistory.objects.create(
-            hash=0,
-            row_id=0,
-            care_site_id=self.hospital2.care_site_id,
-            role_id=self.local_admin_role.role_id,
-            entity_id=self.provider2.provider_id,
-        )
+        self.user2_req1.save()
+
+        self.retrieve_view = RequestViewSet.as_view({'get': 'retrieve'})
+        self.create_view = RequestViewSet.as_view({'post': 'create'})
+        self.delete_view = RequestViewSet.as_view({'delete': 'destroy'})
+        self.update_view = RequestViewSet.as_view({'patch': 'partial_update'})
 
 
-class CareSiteHistoryGetTests(CareSiteHistoryTests):
-    def check_cs_histories_response(self, response, csh_to_find):
-        csh_found = [ObjectView(csh) for csh in self.get_response_payload(response)["results"]]
-
-        csh_found_ids = [cs.care_site_history_id for cs in csh_found]
-        csh_to_find_ids = [cs.care_site_history_id for cs in csh_to_find]
-        msg = "\n".join(["", "got", str(csh_found_ids), "should be", str(csh_to_find_ids)])
-        for i in csh_to_find_ids:
-            self.assertIn(i, csh_found_ids, msg=msg)
-        self.assertEqual(len(csh_found_ids), len(csh_to_find), msg=msg)
-
+class RequestsGetTests(RequestsTests):
     def setUp(self):
-        self.list_view = CareSiteHistoryViewset.as_view({'get': 'list'})
-        self.retrieve_view = CareSiteHistoryViewset.as_view({'get': 'retrieve'})
-        return super(CareSiteHistoryGetTests, self).setUp()
+        super(RequestsGetTests, self).setUp()
+        self.retrieve_view
 
-    def test_admin_get_all_users(self):
-        # As a main admin, I can get all care_site_histories
-        request = self.factory.get('/accesses')
-        force_authenticate(request, self.admin_user)
-        response = self.list_view(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        csh_to_find = [self.admin_access, self.access_user2_pseudo_h2, self.access_user1_pseudo_h3,
-                       self.access_user2_admin_h2, self.access_user1_admin_h1]
-        self.check_cs_histories_response(response, csh_to_find)
-
-    # not used currently
-    def test_user2_get_simple_accesses_where_local_admin_with_children_cs(self):
-        # As a local admin on hospital2, I can get care_site_histories simple accesses of hospital2 and hospital3
-        request = self.factory.get('/accesses', data=dict(type="user"))
-        force_authenticate(request, self.user2)
-        response = self.list_view(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        csh_to_find = [self.access_user2_pseudo_h2, self.access_user1_pseudo_h3]
-        self.check_cs_histories_response(response, csh_to_find)
-
-    # not used currently
-    def test_user2_get_admin_accesses_where_local_admin_with_children_cs(self):
-        # As a local admin on hospital2, I can get care_site_histories of admins of hospital2 and hospital3
-        request = self.factory.get('/accesses', data=dict(type="admin"))
-        force_authenticate(request, self.user2)
-        response = self.list_view(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        csh_to_find = [self.access_user2_admin_h2]
-        self.check_cs_histories_response(response, csh_to_find)
-
-    def test_user2_get_all_accesses_where_local_admin_with_children_cs(self):
-        # As a local admin on hospital2, I can get care_site_histories of hospital2 and hospital3
-        request = self.factory.get('/accesses')
-        force_authenticate(request, self.user2)
-        response = self.list_view(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        csh_to_find = [self.access_user2_pseudo_h2, self.access_user1_pseudo_h3,
-                       self.access_user2_admin_h2]
-        self.check_cs_histories_response(response, csh_to_find)
-
-    def test_user1_get_all_accesses_where_local_admin_with_children_cs(self):
-        # As a local admin on hospital1, I can get care_site_histories of only hospital1
-        request = self.factory.get('/accesses')
+    def test_user_simple_get(self):
+        # As a user, I can get a request I did
+        request = self.factory.get(f'{REQUESTS_URL}/{self.user1_req1.uuid}')
         force_authenticate(request, self.user1)
-        response = self.list_view(request)
+        response = self.retrieve_view(request)
         response.render()
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        csh_to_find = [self.access_user1_admin_h1]
-        self.check_cs_histories_response(response, csh_to_find)
+        req_to_find = [self.user1_req1.uuid]
+        self.check_requests_response(response, [req_to_find])
 
-    def test_user2_get_csh_with_id_as_local_admin_h3(self):
-        # As a local admin on hospital2, I can get a specific care_site_history on hospital3
-        request = self.factory.get(f"/accesses")
-        force_authenticate(request, self.user2)
-        response = self.retrieve_view(
-            request,
-            care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        csh_found = ObjectView(self.get_response_payload(response))
-        self.assertEqual(csh_found.care_site_history_id, self.access_user1_pseudo_h3.care_site_history_id)
-        self.assertEqual(ObjectView(csh_found.role).role_id, self.pseudo_anonymised_data_role.role_id)
-        self.assertEqual(ObjectView(csh_found.provider).provider_id, self.provider1.provider_id)
-        self.assertEqual(ObjectView(csh_found.care_site).care_site_id, self.hospital3.care_site_id)
-
-    def test_error_user1_get_csh_with_id_on_wrong_cs(self):
-        # As a local admin on hospital1, I cannot get a specific care_site_history on hospital2
-        request = self.factory.get(f"/accesses")
+    def test_error_user_simple_get(self):
+        # As a user, I can't get a request user 2 created
+        request = self.factory.get(f'{REQUESTS_URL}/{self.user2_req1.uuid}')
         force_authenticate(request, self.user1)
-        response = self.retrieve_view(
-            request,
-            care_site_history_id=self.access_user2_pseudo_h2.care_site_history_id)
+        response = self.retrieve_view(request)
         response.render()
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
 
-    def test_user2_get_csh_with_id_as_local_admin_h3_with_manual_data(self):
-        # As a local admin on hospital2, I can get a specific care_site_history on hospital3
-        # but manual_columns before the original ones
-        start_date = datetime.now().date()
-        old_end_date = datetime.now().date() + timedelta(days=2)
-        manual_end_date = datetime.now().date() + timedelta(days=4)
-        new_csh = CareSiteHistory.objects.create(
-            hash=0,
-            row_id=0,
-            care_site_id=self.hospital3.care_site_id,
-            role_id=self.pseudo_anonymised_data_role.role_id,
-            entity_id=self.admin_provider.provider_id,
-            start_date=start_date,
-            end_date=old_end_date,
-            manual_end_date=manual_end_date,
-        )
-        request = self.factory.get(f"/accesses")
-        force_authenticate(request, self.user2)
-        response = self.retrieve_view(request, care_site_history_id=new_csh.care_site_history_id)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        csh_found = ObjectView(self.get_response_payload(response))
-        self.assertEqual(datetime.fromisoformat(csh_found.actual_start_date).date(), start_date)
-        self.assertEqual(datetime.fromisoformat(csh_found.actual_end_date).date(), manual_end_date)
 
-
-class CareSiteHistoryCreateTests(CareSiteHistoryTests):
-    def test_create_admin_as_main_admin(self):
-        # As a main admin, I can create an admin access for user1 to hospital2
-        request = self.factory.post('/accesses', dict(
-            care_site_id=self.hospital2.care_site_id,
-            role_id=self.local_admin_role.role_id,
-            entity_id=self.provider1.provider_id), format='json')
-        force_authenticate(request, self.admin_user)
-        response = CareSiteHistoryViewset.as_view({'post': 'create'})(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
-        access = CareSiteHistory.objects.filter(care_site_id=self.hospital2.care_site_id,
-                                                role_id=self.local_admin_role.role_id,
-                                                entity_id=self.provider1.provider_id).first()
-        self.check_is_created(access, self.admin_provider)
-
-    def test_create_admin_as_main_admin_with_dates(self):
-        # As a main admin, I can create an admin access for user1 to hospital2
-        request = self.factory.post('/accesses', dict(
-            care_site_id=self.hospital2.care_site_id,
-            role_id=self.local_admin_role.role_id,
-            entity_id=self.provider1.provider_id,
-            start_date=datetime.now().date(),
-            end_date=datetime.now().date() + timedelta(days=2)
-        ),format='json')
-        force_authenticate(request, self.admin_user)
-        response = CareSiteHistoryViewset.as_view({'post': 'create'})(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
-        access = CareSiteHistory.objects.filter(care_site_id=self.hospital2.care_site_id,
-                                                role_id=self.local_admin_role.role_id,
-                                                entity_id=self.provider1.provider_id).first()
-        self.check_is_created(access, self.admin_provider)
-        self.assertEqual(access.manual_start_date, datetime.now().date(),)
-        self.assertEqual(access.manual_end_date, datetime.now().date() + timedelta(days=2))
-
-    def test_create_user_as_local_admin(self):
-        # As a local admin on hospital1, I can create a user access for user2 to hospital1
-        request = self.factory.post('/accesses', dict(
-            care_site_id=self.hospital1.care_site_id,
-            role_id=self.pseudo_anonymised_data_role.role_id,
-            entity_id=self.provider2.provider_id), format='json')
-        force_authenticate(request, self.user1)
-        response = CareSiteHistoryViewset.as_view({'post': 'create'})(request)
-
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
-        access = CareSiteHistory.objects.filter(care_site_id=self.hospital1.care_site_id,
-                                                role_id=self.pseudo_anonymised_data_role.role_id,
-                                                entity_id=self.provider2.provider_id).first()
-        self.check_is_created(access, self.provider1)
-
-    def test_error_create_user_as_a_user(self):
-        # As user with access to hospital1, I cannot create an access for user2 to hospital3
-        request = self.factory.post('/accesses', dict(
-            care_site_id=self.hospital3.care_site_id,
-            role_id=self.pseudo_anonymised_data_role.role_id,
-            entity_id=self.provider2.provider_id), format='json')
-        force_authenticate(request, self.user1)
-        response = CareSiteHistoryViewset.as_view({'post': 'create'})(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
-        access = CareSiteHistory.objects.filter(care_site_id=self.hospital2.care_site_id,
-                                                role_id=self.pseudo_anonymised_data_role.role_id,
-                                                entity_id=self.provider1.provider_id).first()
-        self.assertIsNone(access)
-
-    def test_error_create_user_from_another_care_site(self):
-        # As a local admin from hospital1, I cannot create an access for user1 to hospital2
-        request = self.factory.post('/accesses', dict(
-            care_site_id=self.hospital2.care_site_id,
-            role_id=self.pseudo_anonymised_data_role.role_id,
-            entity_id=self.provider1.provider_id), format='json')
-        force_authenticate(request, self.user1)
-        response = CareSiteHistoryViewset.as_view({'post': 'create'})(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
-        access = CareSiteHistory.objects.filter(care_site_id=self.hospital2.care_site_id,
-                                                role_id=self.pseudo_anonymised_data_role.role_id,
-                                                entity_id=self.provider1.provider_id).first()
-        self.assertIsNone(access)
-
-    def test_create_user_as_local_admin_from_root_care_site(self):
-        # As a local admin on hospital2, I can create a user access for user2 to hospital3
-        request = self.factory.post('/accesses', dict(
-            care_site_id=self.hospital3.care_site_id,
-            role_id=self.pseudo_anonymised_data_role.role_id,
-            entity_id=self.provider2.provider_id), format='json')
-        force_authenticate(request, self.user2)
-        response = CareSiteHistoryViewset.as_view({'post': 'create'})(request)
-
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
-        access = CareSiteHistory.objects.filter(care_site_id=self.hospital3.care_site_id,
-                                                role_id=self.pseudo_anonymised_data_role.role_id,
-                                                entity_id=self.provider2.provider_id).first()
-        self.check_is_created(access, self.provider2)
-
-    def test_create_admin_as_main_admin_but_without_unsettable_fields(self):
-        # As a main admin, I can create an admin access for user1 to hospital2
-        request_csh = dict(
-            care_site_id=self.hospital2.care_site_id,
-            role_id=self.local_admin_role.role_id,
-            entity_id=self.provider1.provider_id,
-            change_datetime=datetime.now().date(),
-            role_source_id=50,
-            role_source_value="test",
-            cdm_source="test",
-            domain_id="test",
-            relationship_type_concept_id=50,
-            care_site_history_id=50,
-        )
-        request = self.factory.post('/accesses', request_csh, format='json')
-        force_authenticate(request, self.admin_user)
-        response = CareSiteHistoryViewset.as_view({'post': 'create'})(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
-        access = CareSiteHistory.objects.filter(care_site_id=self.hospital2.care_site_id,
-                                                role_id=self.local_admin_role.role_id,
-                                                entity_id=self.provider1.provider_id).first()
-        self.check_is_created(access, self.admin_provider, request_csh)
-
-
-class CareSiteHistoryDeleteTests(CareSiteHistoryTests):
-    def setUp(self):
-        self.view = CareSiteHistoryViewset.as_view({'delete': 'destroy'})
-        return super(CareSiteHistoryDeleteTests, self).setUp()
-
-    def test_delete_user_as_main_admin(self):
-        # As an admin on main care_site, I can delete a user access for user to hospital2
-        request = self.factory.delete(f"/accesses")
-        force_authenticate(request, self.admin_user)
-        response = self.view(request, care_site_history_id=self.access_user2_pseudo_h2.care_site_history_id)
-
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.content)
-        access = CareSiteHistory.objects.filter(
-            even_deleted=True,
-            care_site_history_id=self.access_user2_pseudo_h2.care_site_history_id).first()
-        self.check_is_deleted(access, self.admin_provider)
-
-    def test_delete_user_as_local_admin(self):
-        # As a local admin on hospital2, I can delete a user access for user2 to hospital2
-        request = self.factory.delete(f"/accesses")
-        force_authenticate(request, self.user2)
-        response = self.view(request, care_site_history_id=self.access_user2_pseudo_h2.care_site_history_id)
-
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.content)
-        access = CareSiteHistory.objects.filter(
-            even_deleted=True,
-            care_site_history_id=self.access_user2_pseudo_h2.care_site_history_id).first()
-        self.check_is_deleted(access, self.provider2)
-
-    def test_delete_user_as_local_admin_on_root_caresite(self):
-        # As a local admin on hospital2, I can delete a user access for user1 to hospital3
-        request = self.factory.delete(f"/accesses")
-        force_authenticate(request, self.user2)
-        response = self.view(request, care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id)
-
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.content)
-        access = CareSiteHistory.objects.filter(
-            even_deleted=True,
-            care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id).first()
-        self.check_is_deleted(access, self.provider2)
-
-    def test_error_delete_user_as_local_admin_on_wrong_hospital(self):
-        # As a local admin on hospital1, I can't delete a user access for user2 to hospital2
-        request = self.factory.delete(f"/accesses")
-        force_authenticate(request, self.user1)
-        response = self.view(request, care_site_history_id=self.access_user2_pseudo_h2.care_site_history_id)
-
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
-        access = CareSiteHistory.objects.filter(
-            even_deleted=True,
-            care_site_history_id=self.access_user2_pseudo_h2.care_site_history_id).first()
-        self.assertIsNotNone(access)
-        self.assertIsNone(access.delete_datetime)
-
-
-class CareSiteHistoryUpdateTests(CareSiteHistoryTests):
-    def setUp(self):
-        self.view = CareSiteHistoryViewset.as_view({'patch': 'partial_update'})
-        return super(CareSiteHistoryUpdateTests, self).setUp()
-
-    def test_update_user_access_as_main_admin(self):
-        # As an admin on main care_site, I can update a user access for user1 to hospital3
-        # but role_id, care_site_id, and entity_id won't change
-        request = self.factory.patch(f"/accesses", dict(
-            role_id=self.nominative_data_role.role_id,
-            care_site_id=self.hospital2.care_site_id,
-            entity_id=self.provider2.provider_id,
-            end_date=datetime.now().date() + timedelta(days=2)
+class RequestsCreateTests(RequestsTests):
+    def test_create_simple_request(self):
+        # As a user, I can create a request
+        request = self.factory.post(REQUESTS_URL, dict(
+            name="Request 3",
+            description="Request number 3",
         ), format='json')
-        force_authenticate(request, self.admin_user)
-        origin_role_id = self.access_user1_pseudo_h3.role_id
-
-        response = self.view(request, care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id)
-
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        access = CareSiteHistory.objects.get(care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id)
-        self.check_unupdatable_not_updated(access, self.access_user1_pseudo_h3)
-
-        self.assertEqual(access.manual_end_date, datetime.now().date() + timedelta(days=2))
-        self.assertEqual(access.role_id, origin_role_id)
-
-    def test_update_user_access_as_local_admin(self):
-        # As a local admin on hospital2, I can update a user access for user1 to hospital3
-        request = self.factory.patch(f"/accesses", dict(
-            start_date=datetime.now().date() + timedelta(days=2)), format='json')
-        force_authenticate(request, self.user2)
-        response = self.view(request, care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id)
-
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        access = CareSiteHistory.objects.get(care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id)
-        self.check_unupdatable_not_updated(access, self.access_user1_pseudo_h3)
-
-        self.assertEqual(access.manual_start_date, datetime.now().date() + timedelta(days=2))
-
-    def test_error_update_user_access_other_caresite(self):
-        # As a local admin on hospital1, I can't update a user access for user2 to hospital2
-        request = self.factory.patch(f"/accesses", dict(
-            start_date=datetime.now().date() + timedelta(days=2)), format='json')
         force_authenticate(request, self.user1)
-        response = self.view(request, care_site_history_id=self.access_user2_pseudo_h2.care_site_history_id)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        req = Request.objects.filter(
+            name="Request 3",
+            description="Request number 3",
+            owner_id=self.user1.uuid).first()
+        self.assertIsNotNone(req)
 
+    def test_error_create_simple_request_with_other_owner(self):
+        # As a user, I can create a request
+        request = self.factory.post(REQUESTS_URL, dict(
+            name="Request 3",
+            description="Request number 3",
+            owner=self.user2
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
         response.render()
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
-        access = CareSiteHistory.objects.get(care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id)
-        self.check_unupdatable_not_updated(access, self.access_user1_pseudo_h3)
+        req = Request.objects.filter(
+            name="Request 3",
+            description="Request number 3").first()
+        self.assertIsNone(req)
 
-        self.assertNotEqual(access.manual_start_date, datetime.now().date() + timedelta(days=2))
 
-    def test_update_with_dates_as_none_retrieve_constants(self):
-        # As an admin on main care_site, I can update a user access for user1 to hospital3
-        # but if None or undefined, manual_dates will be set to constants defined in settings
-        request = self.factory.patch(f"/accesses", dict(
-            start_date=None,
-            end_date=None
+class RequestsDeleteTests(RequestsTests):
+    def setUp(self):
+        self.view = RequestViewSet.as_view({'delete': 'destroy'})
+        return super(RequestsDeleteTests, self).setUp()
+
+    def test_delete_request_as_owner(self):
+        # As a user, I can delete a request I created
+        request = self.factory.delete(REQUESTS_URL)
+        force_authenticate(request, self.user1)
+        response = self.delete_view(request, uuid=self.user1_req1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.content)
+        req = Request.objects.filter(
+            uuid=self.user1_req1.uuid
+        ).first()
+        self.assertIsNone(req)
+
+    def test_error_delete_request_as_not_owner(self):
+        # As a user, I cannot delete another user's request
+        request = self.factory.delete(REQUESTS_URL)
+        force_authenticate(request, self.user2)
+        response = self.delete_view(request, uuid=self.user1_req1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+        req = Request.objects.filter(
+            uuid=self.user1_req1.uuid
+        ).first()
+        self.assertIsNotNone(req)
+
+
+class RequestsUpdateTests(RequestsTests):
+    def test_update_request_as_owner(self):
+        # As a user, I can update a request I created
+        request = self.factory.patch(REQUESTS_URL, dict(
+            name="New name",
+            description="New description",
         ), format='json')
-        force_authenticate(request, self.admin_user)
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1.uuid)
+        response.render()
 
-        response = self.view(request, care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        req = Request.objects.get(uuid=self.user1_req1.uuid)
+        self.assertEqual(req.name, "New name")
+        self.assertEqual(req.description, "New description")
 
+    def test_error_update_request_as_not_owner(self):
+        # As a user, I cannot update another user's request
+        request = self.factory.patch(REQUESTS_URL, dict(
+            name="New name",
+            description="New description",
+        ), format='json')
+        force_authenticate(request, self.user2)
+        response = self.update_view(request, uuid=self.user1_req1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+        req = Request.objects.get(uuid=self.user1_req1.uuid)
+        self.assertEqual(req.name, self.user1_req1.name)
+        self.assertEqual(req.description, self.user1_req1.description)
+
+    def test_error_update_request_forbidden_fields(self):
+        # As a user, I cannot update some fields in a request I created
+        request = self.factory.patch(REQUESTS_URL, dict(
+            owner=self.user2,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+
+        req = Request.objects.get(uuid=self.user1_req1.uuid)
+        self.assertEqual(req.owner_id, self.user1_req1.owner_id)
+
+
+# REQUEST_QUERY_SNAPSHOTS
+class RqsTests(RequestsTests):
+    def check_requests_response(self, response, req_to_find):
+        req_found = [ObjectView(csh) for csh in self.get_response_payload(response)["results"]]
+        req_found_ids = [req.uuid for req in req_found]
+        req_to_find_ids = [req.uuid for req in req_to_find]
+        msg = "\n".join(["", "got", str(req_found_ids), "should be", str(req_to_find_ids)])
+        for i in req_to_find_ids:
+            self.assertIn(i, req_found_ids, msg=msg)
+        self.assertEqual(len(req_found_ids), len(req_to_find), msg=msg)
+
+    def setUp(self):
+        super(RqsTests, self).setUp()
+        #          user1_snap1
+        #           /       \
+        # user1_b1_snap2  user1_b2_snap2 (active) (saved)
+        #                         |
+        #                 user1_b2_snap3 (active)
+
+        self.user1_req2 = Request(
+            owner=self.user1,
+            name="Request 2",
+            description=" Request 2 from user 1",
+        )
+        self.user1_req2.save()
+
+        self.user1_req1_snap1 = RequestQuerySnapshot(
+            owner=self.user1,
+            request=self.user1_req1,
+        )
+        self.user1_req1_snap1.save()
+
+        self.user1_req1_branch1_snap2 = RequestQuerySnapshot(
+            owner=self.user1,
+            request=self.user1_req1,
+            previous_snapshot=self.user1_req1_snap1,
+            serialized_query='{"perimeter": "Terra"}',
+            is_active_branch=False,
+        )
+        self.user1_req1_branch1_snap2.save()
+
+        self.user1_req1_branch2_snap2 = RequestQuerySnapshot(
+            owner=self.user1,
+            request=self.user1_req1,
+            previous_snapshot=self.user1_req1_snap1,
+            serialized_query='{"perimeter": "Hera"}',
+            saved=True,
+        )
+        self.user1_req1_branch2_snap2.save()
+
+        self.user1_req1_branch2_snap3 = RequestQuerySnapshot(
+            owner=self.user1,
+            request=self.user1_req1,
+            previous_snapshot=self.user1_req1_snap1,
+            serialized_query='{"perimeter": "Hera", "condition1": {}}',
+        )
+        self.user1_req1_branch2_snap3.save()
+
+        self.user2_req1_snap1 = RequestQuerySnapshot(
+            owner=self.user2,
+            request=self.user2_req1,
+        )
+        self.user2_req1_snap1.save()
+
+        self.retrieve_view = RequestQuerySnapshotViewSet.as_view({'get': 'retrieve'})
+        self.create_view = RequestQuerySnapshotViewSet.as_view({'post': 'create'})
+        self.delete_view = RequestQuerySnapshotViewSet.as_view({'delete': 'destroy'})
+        self.update_view = RequestQuerySnapshotViewSet.as_view({'patch': 'partial_update'})
+
+
+class RqsGetTests(RqsTests):
+    def test_user_simple_get(self):
+        # As a user, I can get a rqs I did
+        request = self.factory.get(f'{RQS_URL}/{self.user1_req1_snap1.uuid}')
+        force_authenticate(request, self.user1)
+        response = self.retrieve_view(request)
         response.render()
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        access = CareSiteHistory.objects.get(care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id)
-        self.check_unupdatable_not_updated(access, self.access_user1_pseudo_h3)
+        rqs_to_find = [self.user1_req1_snap1.uuid]
+        self.check_requests_response(response, [rqs_to_find])
 
-        self.assertEqual(access.manual_start_date, MODEL_MANUAL_START_DATE_DEFAULT_ON_UPDATE.date())
-        self.assertEqual(access.manual_end_date, MODEL_MANUAL_END_DATE_DEFAULT_ON_UPDATE.date())
+    def test_error_user_simple_get(self):
+        # As a user, I can't get a rqs user 2 created
+        request = self.factory.get(f'{RQS_URL}/{self.user2_req1_snap1.uuid}')
+        force_authenticate(request, self.user1)
+        response = self.retrieve_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+
+    def test_rest_get_list_from_request(self):
+        # As a user, I can get the list of RQS from the Request they are binded to
+        request = self.factory.get(f'{REQUESTS_URL}/{self.user1_req1.uuid}/query-snapshots')
+        force_authenticate(request, self.user1)
+        response = self.retrieve_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        rqs_to_find = [self.user1_req1_snap1.uuid, self.user1_req1_branch1_snap2,
+                       self.user1_req1_branch2_snap2, self.user1_req1_branch2_snap3]
+        self.check_requests_response(response, [rqs_to_find])
 
 
-    # used to be when it was possible to update role_id
-    # def test_error_upgrade_user_access_as_local_admin(self):
-    #     # As a local admin on hospital2, I can't upgrade a user access for user1 in hospital3 to admin access
-    #     request = self.factory.patch(f"/accesses", dict(
-    #         start_date=datetime.now().date() + timedelta(days=2)), format='json')
-    #     force_authenticate(request, self.user2)
-    #     response = CareSiteHistoryViewset \
-    #         .as_view({'patch': 'partial_update'})(request, pk=self.access_user1_pseudo_h3.care_site_history_id)
-    #
-    #     response.render()
-    #     self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
-    #     access = CareSiteHistory.objects.get(care_site_history_id=self.access_user1_pseudo_h3.care_site_history_id)
-    #     self.check_unupdatable_not_updated(access, self.access_user1_pseudo_h3)
-    #
-    #     self.assertNotEqual(access.manual_start_date, datetime.now().date() + timedelta(days=2))
-    #
-    # def test_error_downgrade_admin_access_as_local_admin(self):
-    #     # As a local admin on hospital1, I can't update an admin access for user2 in hospital2 to user role
-    #     access_user2_admin_h1 = CareSiteHistory.objects.create(
-    #         hash=0,
-    #         row_id=0,
-    #         care_site_id=self.hospital1.care_site_id,
-    #         role_id=self.nominative_data_role.role_id,
-    #         entity_id=self.provider2.provider_id,
-    #         manual_role_id=self.local_admin_role.role_id
-    #     )
-    #     request = self.factory.patch(f"/accesses", dict(
-    #         role_id=self.nominative_data_role.role_id, format='json'))
-    #     force_authenticate(request, self.user1)
-    #     response = CareSiteHistoryViewset \
-    #         .as_view({'patch': 'partial_update'})(request, pk=access_user2_admin_h1.care_site_history_id)
-    #
-    #     response.render()
-    #     self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
-    #     access = CareSiteHistory.objects.get(care_site_history_id=access_user2_admin_h1.care_site_history_id)
-    #     self.check_unupdatable_not_updated(access, self.access_user2_admin_h1)
-    #
-    #     self.assertEqual(access.manual_role_id, self.local_admin_role.role_id)
+class RqsCreateTests(RqsTests):
+    def test_create_rqs_after_another(self):
+        # As a user, I can create a rqs after one in the active branch of a request
+        request = self.factory.post(RQS_URL, dict(
+            previous_snapshot=self.user1_req1_branch2_snap3,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        rqs = RequestQuerySnapshot.objects.filter(
+            owner=self.user1,
+            previous_snapshot=self.user1_req1_branch2_snap3,
+            request=self.user1_req1
+        ).first()
+        self.assertIsNotNone(rqs)
+
+    def test_create_rqs_on_users_empty_request(self):
+        # As a user, I can create a rqs for a request that has no rqs yet
+        test_sq = '{"test": "success"}'
+        request = self.factory.post(RQS_URL, dict(
+            request=self.user1_req2,
+            serialized_query=test_sq,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        rqs = RequestQuerySnapshot.objects.filter(
+            serialized_query=test_sq,
+            owner_id=self.user1.uuid,
+            request_id=self.user1_req1.uuid,
+            previous_snapshot_id=None
+        ).first()
+        self.assertIsNotNone(rqs)
+
+    def test_error_create_rqs_with_forbidden_access(self):
+        forbidden_sq = '{"test": "forbidden"}'
+
+        # As a user, I cannot create a rqs specifying another user
+        request = self.factory.post(RQS_URL, dict(
+            previous_snapshot=self.user1_req1_branch2_snap3,
+            owner=self.user2,
+            serialized_query=forbidden_sq
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot create a rqs specifying a request not matching the prev_snapshot
+        request = self.factory.post(RQS_URL, dict(
+            previous_snapshot=self.user1_req1_branch2_snap3,
+            request=self.user1_req2,
+            serialized_query=forbidden_sq
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot create a rqs specifying another user as owner
+        request = self.factory.post(RQS_URL, dict(
+            previous_snapshot=self.user1_req1_branch2_snap3,
+            owner=self.user2,
+            serialized_query = forbidden_sq,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot create a rqs specifying only a non-empty request
+        request = self.factory.post(RQS_URL, dict(
+            request=self.user1_req1_snap1,
+            serialized_query=forbidden_sq
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        self.assertIsNone(RequestQuerySnapshot.objects.filter(
+            serialized_query=forbidden_sq
+        ).first())
+
+    def test_error_create_rqs_for_request_not_owned(self):
+        # As a user, I cannot create a rqs specifying a prev_snapshot I don't own
+        forbidden_sq = '{"test": "forbidden"}'
+        request = self.factory.post(RQS_URL, dict(
+            previous_snapshot=self.user2_req1_snap1,
+            serialized_query=forbidden_sq
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+
+        self.assertIsNone(Request.objects.filter(
+            serialized_query=forbidden_sq
+        ).first())
+
+
+class RqsDeleteTests(RqsTests):
+    def test_error_delete_rqs(self):
+        # As a user, I cannot delete a rqs, even if I own it
+        request = self.factory.delete(RQS_URL)
+        force_authenticate(request, self.user1)
+        response = self.delete_view(request, uuid=self.user1_req1_branch2_snap3.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+        self.assertIsNotNone(RequestQuerySnapshot.filter(uuid=self.user1_req1_branch2_snap3.uuid).first())
+
+
+class RqsUpdateTests(RqsTests):
+    def test_error_update_rqs(self):
+        # As a user, I cannot update a rqs, even if I own it
+        request = self.factory.patch(RQS_URL, dict(
+            serialized_query='{"test": "forbidden"}',
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap3.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+
+        rqs = RequestQuerySnapshot.objects.get(uuid=self.user1_req1.uuid)
+        self.assertEqual(rqs.uuid.serialized_query, self.user1_req1_branch2_snap3.serialized_query)
+
+
+# DATED_MEASURES
+class DatedMeasuresTests(RqsTests):
+    def setUp(self):
+        super(DatedMeasuresTests, self).setUp()
+        self.user1_req1_branch2_snap3_dm1 = DatedMeasure(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            measure=10,
+            fhir_datetime=datetime.now() + timedelta(days=-2)
+        )
+        self.user1_req1_branch2_snap3_dm1.save()
+
+        self.user1_req1_branch2_snap3_dm2 = DatedMeasure(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            measure=20,
+            fhir_datetime=datetime.now() + timedelta(days=-1)
+        )
+        self.user1_req1_branch2_snap3_dm2.save()
+
+        self.user2_req1_snap1_dm1 = DatedMeasure(
+            owner=self.user2,
+            request=self.user2_req1,
+            request_query_snapshot=self.user2_req1_snap1,
+            measure=20,
+            fhir_datetime=datetime.now() + timedelta(days=-1)
+        )
+        self.user2_req1_snap1_dm1.save()
+
+        self.list_view = DatedMeasureViewSet.as_view({'get': 'list'})
+        self.retrieve_view = DatedMeasureViewSet.as_view({'get': 'retrieve'})
+        self.create_view = DatedMeasureViewSet.as_view({'post': 'create'})
+        self.delete_view = DatedMeasureViewSet.as_view({'delete': 'destroy'})
+        self.update_view = DatedMeasureViewSet.as_view({'patch': 'partial_update'})
+
+
+class DatedMeasuresGetTests(DatedMeasuresTests):
+    def test_user_simple_get(self):
+        # As a user, I can get a dated_measure I generated
+        request = self.factory.get(f'{DATED_MEASURES_URL}/{self.user1_req1_branch2_snap3_dm1.uuid}')
+        force_authenticate(request, self.user1)
+        response = self.retrieve_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        dm_to_find = [self.user1_req1_branch2_snap3_dm1.uuid]
+        self.check_requests_response(response, [dm_to_find])
+
+    def test_error_user_simple_get(self):
+        # As a user, I can't get a dated_measure user 2 generated
+        request = self.factory.get(f'{DATED_MEASURES_URL}/{self.user2_req1_snap1_dm1.uuid}')
+        force_authenticate(request, self.user1)
+        response = self.retrieve_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+
+    def test_user_get_snapshot_list(self):
+        # As a user, I can get a list of dated_measures generated from a Rqs I own
+        request = self.factory.get(f'{DATED_MEASURES_URL}/?request_query_snapshot={self.user1_req1_branch2_snap3.uuid}')
+        force_authenticate(request, self.user1)
+        response = self.list_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        dm_to_find = [self.user1_req1_branch2_snap3_dm1.uuid, self.user1_req1_branch2_snap3_dm2.uuid]
+        self.check_requests_response(response, [dm_to_find])
+
+    def test_rest_get_list_from_rqs(self):
+        # As a user, I can get the list of RQS from the Request they are binded to
+        request = self.factory.get(f'{RQS_URL}/{self.user1_req1_branch2_snap3.uuid}/dated')
+        force_authenticate(request, self.user1)
+        response = self.retrieve_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        rqs_to_find = [self.user1_req1_snap1.uuid, self.user1_req1_branch1_snap2,
+                       self.user1_req1_branch2_snap2, self.user1_req1_branch2_snap3]
+        self.check_requests_response(response, [rqs_to_find])
+
+
+class DatedMeasuresCreateTests(DatedMeasuresTests):
+    def test_create_dm(self):
+        # As a user, I can create a dated_measure for one request_query_snapshot
+        request = self.factory.post(DATED_MEASURES_URL, dict(
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+            measure=55,
+            fhir_datetime=datetime.now()
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        rqs = DatedMeasure.objects.filter(
+            measure=55,
+            owner=self.user1,
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+        ).first()
+        self.assertIsNotNone(rqs)
+
+    def test_error_create_dm_with_forbidden_access(self):
+        forbidden_test_measure = 55
+        forbidden_time = datetime.now()
+
+        # As a user, I cannot create a dm without specifying a measure
+        request = self.factory.post(DATED_MEASURES_URL, dict(
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+            fhir_datetime=forbidden_time
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot create a dm without specifying a fhir_datetime
+        request = self.factory.post(DATED_MEASURES_URL, dict(
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+            measure=forbidden_test_measure,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot create a rqs specifying another owner
+        request = self.factory.post(DATED_MEASURES_URL, dict(
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+            measure=forbidden_test_measure,
+            fhir_datetime=forbidden_time,
+            owner=self.user2
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot create a rqs specifying another owner
+        request = self.factory.post(DATED_MEASURES_URL, dict(
+            request_query_snapshot=self.user1_req1_branch2_snap2.uuid,
+            measure=forbidden_test_measure,
+            fhir_datetime=forbidden_time,
+            request=self.user1_req2.uuid
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        self.assertIsNone(DatedMeasure.objects.filter(
+            measure=forbidden_test_measure
+        ).first())
+        self.assertIsNone(DatedMeasure.objects.filter(
+            fhir_datetime=forbidden_time
+        ).first())
+
+    def test_error_create_dm_on_rqs_not_owned(self):
+        # As a user, I cannot create a dm on a Rqs I don't own
+        forbidden_test_measure = 55
+
+        request = self.factory.post(DATED_MEASURES_URL, dict(
+            request_query_snapshot=self.user2_req1_snap1_dm1,
+            measure=forbidden_test_measure,
+            fhir_datetime=datetime.now()
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+
+        self.assertIsNone(DatedMeasure.objects.filter(
+            measure=forbidden_test_measure
+        ).first())
+
+
+class DatedMeasuresDeleteTests(DatedMeasuresTests):
+    def setUp(self):
+        super(DatedMeasuresDeleteTests, self).setUp()
+        self.user1_req1_branch2_snap3_cohort1 = CohortResult(
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            request=self.user1_req1,
+            owner=self.user1,
+            dated_measure=self.user1_req1_branch2_snap3_dm1,
+        )
+
+    def test_delete_owned_dm_without_cohort(self):
+        # As a user, I can delete a dated measure I owned, not binded to a CohortResult
+        request = self.factory.delete(DATED_MEASURES_URL)
+        force_authenticate(request, self.user1)
+        response = self.delete_view(request, uuid=self.user1_req1_branch2_snap3_dm2.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.content)
+        self.assertIsNone(DatedMeasure.filter(uuid=self.user1_req1_branch2_snap3.uuid).first())
+
+    def test_error_delete_owned_dm_with_cohort(self):
+        # As a user, I cannot delete a dated measure binded to a CohortResult
+        request = self.factory.delete(DATED_MEASURES_URL)
+        force_authenticate(request, self.user1)
+        response = self.delete_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+        self.assertIsNotNone(DatedMeasure.filter(uuid=self.user1_req1_branch2_snap3_dm1.uuid).first())
+
+    def test_error_delete_not_owned(self):
+        # As a user, I cannot delete a dated measure linekd to a CohortResult
+        request = self.factory.delete(DATED_MEASURES_URL)
+        force_authenticate(request, self.user1)
+        response = self.delete_view(request, uuid=self.user2_req1_snap1_dm1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+        self.assertIsNotNone(DatedMeasure.filter(uuid=self.user2_req1_snap1_dm1.uuid).first())
+
+
+class DatedMeasuresUpdateTests(DatedMeasuresTests):
+    def test_update_dm_as_owner(self):
+        # As a user, I can update a dated measure I own
+
+        new_measure = 55
+        new_datetime = datetime.now()
+        request = self.factory.patch(DATED_MEASURES_URL, dict(
+            measure=new_measure,
+            fhir_datetime=new_datetime,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        dm = DatedMeasure.objects.get(uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        self.assertEqual(dm.measure, new_measure)
+        self.assertEqual(dm.fhir_datetime, new_datetime)
+
+    def test_error_update_dm_as_not_owner(self):
+        # As a user, I cannot update a dated_measure I don't own
+        request = self.factory.patch(DATED_MEASURES_URL, dict(
+            measure=55,
+            fhir_datetime=datetime.now(),
+        ), format='json')
+        force_authenticate(request, self.user2)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+        dm = DatedMeasure.objects.get(uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        self.assertEqual(dm.measure, self.user1_req1_branch2_snap3_dm1.measure)
+        self.assertEqual(dm.fhir_datetime, self.user1_req1_branch2_snap3_dm1.fhir_datetime)
+
+    def test_error_update_dm_forbidden_fields(self):
+        # As a user, I cannot update owner in a dated_measure I own
+        request = self.factory.patch(DATED_MEASURES_URL, dict(
+            owner=self.user2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot update request in a dated_measure I own
+        request = self.factory.patch(DATED_MEASURES_URL, dict(
+            request=self.user1_req2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot update rqs in a dated_measure I own
+        request = self.factory.patch(DATED_MEASURES_URL, dict(
+            request_query_snapshot=self.user1_req1_branch2_snap2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        dm = DatedMeasure.objects.get(uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        self.assertEqual(dm.owner_id, self.user1_req1_branch2_snap3_dm1.owner_id)
+        self.assertEqual(dm.request_id, self.user1_req1_branch2_snap3_dm1.request_id)
+        self.assertEqual(dm.request_query_snapshot_id, self.user1_req1_branch2_snap3_dm1.request_query_snapshot_id)
+
+
+# COHORTS
+class CohortsTests(RqsTests):
+    def check_requests_response(self, response, req_to_find):
+        req_found = [ObjectView(csh) for csh in self.get_response_payload(response)["results"]]
+        req_found_ids = [req.uuid for req in req_found]
+        req_to_find_ids = [req.uuid for req in req_to_find]
+        msg = "\n".join(["", "got", str(req_found_ids), "should be", str(req_to_find_ids)])
+        for i in req_to_find_ids:
+            self.assertIn(i, req_found_ids, msg=msg)
+        self.assertEqual(len(req_found_ids), len(req_to_find), msg=msg)
+
+    def setUp(self):
+        super(RequestsTests, self).setUp()
+        self.user1_req1_branch2_snap3_dm1 = DatedMeasure(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            measure=10,
+            fhir_datetime=datetime.now() + timedelta(days=-2)
+        )
+        self.user1_req1_branch2_snap3_dm1.save()
+
+        self.user1_req1_branch2_snap3_cr1 = CohortResult(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            fhir_group_id="group1",
+            dated_measure=self.user1_req1_branch2_snap3_dm1
+        )
+        self.user1_req1_branch2_snap3_cr1.save()
+
+        self.user1_req1_branch2_snap2_dm1 = DatedMeasure(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            measure=10,
+            fhir_datetime=datetime.now() + timedelta(days=-2)
+        )
+        self.user1_req1_branch2_snap3_dm1.save()
+
+        self.user1_req1_branch2_snap2_cr1 = CohortResult(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+            fhir_group_id="group2",
+            dated_measure=self.user1_req1_branch2_snap3_dm1
+        )
+        self.user1_req1_branch2_snap3_cr1.save()
+
+        self.user2_req1_snap1_dm1 = DatedMeasure(
+            owner=self.user2,
+            request=self.user2_req1,
+            request_query_snapshot=self.user2_req1_snap1,
+            measure=20,
+            fhir_datetime=datetime.now() + timedelta(days=-1)
+        )
+        self.user2_req1_snap1_dm1.save()
+
+        self.user2_req1_snap1_cr1 = CohortResult(
+            owner=self.user2,
+            request=self.user2_req1,
+            request_query_snapshot=self.user2_req1_snap1,
+            fhir_group_id="group3",
+            dated_measure=self.user2_req1_snap1_dm1
+        )
+        self.user2_req1_snap1_dm1.save()
+
+        self.list_view = RequestViewSet.as_view({'get': 'list'})
+        self.retrieve_view = CohortResultViewSet.as_view({'get': 'retrieve'})
+        self.create_view = CohortResultViewSet.as_view({'post': 'create'})
+        self.delete_view = CohortResultViewSet.as_view({'delete': 'destroy'})
+        self.update_view = CohortResultViewSet.as_view({'patch': 'partial_update'})
+
+
+class CohortsGetTests(CohortsTests):
+    def test_user_simple_get(self):
+        # As a user, I can get a request I did
+        request = self.factory.get(f'{COHORTS_URL}/{self.user1_req1_branch2_snap2_cr1.uuid}')
+        force_authenticate(request, self.user1)
+        response = self.retrieve_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        cr_to_find = [self.user1_req1_branch2_snap2_cr1.uuid]
+        self.check_requests_response(response, [cr_to_find])
+
+    def test_error_wrong_user(self):
+        # As a user, I can't get a request user 2 created
+        request = self.factory.get(f'{COHORTS_URL}/{self.user2_req1_snap1_cr1.uuid}')
+        force_authenticate(request, self.user1)
+        response = self.retrieve_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+
+
+class CohortsCreateTests(CohortsTests):
+    def test_create(self):
+        # As a user, I can create a CohortResult
+        test_name = "My new cohort"
+        test_description = "Cohort I just did"
+        test_measure = 55
+        test_datetime = datetime.now()
+
+        cohort = self.factory.post(COHORTS_URL, dict(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            dated_measure=dict(
+                measure=test_measure,
+                fhir_datetime=test_datetime,
+            )
+        ), format='json')
+        force_authenticate(cohort, self.user1)
+        response = self.create_view(cohort)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        cr = CohortResult.objects.filter(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid
+        ).first()
+        self.assertIsNotNone(cr)
+
+        dm = DatedMeasure.objects.filter(
+            uuid="My new cohort",
+            measure=test_measure,
+            fhir_datetime=test_datetime,
+        ).first()
+        self.assertIsNotNone(dm)
+
+    def test_error_create_with_forbidden_fields(self):
+        test_name = "My new cohort"
+        test_description = "Cohort I just did"
+        test_measure = 55
+        test_datetime = datetime.now()
+
+        # As a user, I cannot create a cohort result while specifying a owner
+        request = self.factory.post(COHORTS_URL, dict(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            dated_measure=dict(
+                measure=test_measure,
+                fhir_datetime=test_datetime,
+            ),
+            owner=self.user2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user2)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot create a cohort result while specifying a request
+        request = self.factory.post(COHORTS_URL, dict(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            dated_measure=dict(
+                measure=test_measure,
+                fhir_datetime=test_datetime,
+            ),
+            request=self.user1_req2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user2)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot create a cohort result while specifying a type
+        request = self.factory.post(COHORTS_URL, dict(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            dated_measure=dict(
+                measure=test_measure,
+                fhir_datetime=test_datetime,
+            ),
+            type="MY_PATIENTS",
+        ), format='json')
+        force_authenticate(request, self.user2)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        self.assertIsNone(CohortResult.objects.filter(
+            name=test_name).first())
+
+    def test_error_create_with_wrong_owner(self):
+        # As a user, I can create a request
+        test_name = "My new cohort"
+        test_description = "Cohort I just did"
+        test_measure = 55
+        test_datetime = datetime.now()
+
+        request = self.factory.post(COHORTS_URL, dict(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            dated_measure=dict(
+                measure=test_measure,
+                fhir_datetime=test_datetime,
+            )
+        ), format='json')
+        force_authenticate(request, self.user2)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+        self.assertIsNone(CohortResult.objects.filter(
+            name=test_name).first())
+
+
+class CohortsDeleteTests(CohortsTests):
+    def test_delete_as_owner(self):
+        # As a user, I can delete a cohort result I created
+        request = self.factory.delete(COHORTS_URL)
+        force_authenticate(request, self.user1)
+        response = self.delete_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.content)
+        self.assertIsNone(CohortResult.objects.filter(
+            uuid=self.user1_req1_branch2_snap2_cr1.uuid
+        ).first())
+
+    def test_error_delete_as_not_owner(self):
+        # As a user, I cannot delete another user's cohort result
+        request = self.factory.delete(COHORTS_URL)
+        force_authenticate(request, self.user2)
+        response = self.delete_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+        self.assertIsNotNone(CohortResult.objects.filter(
+            uuid=self.user1_req1_branch2_snap2_cr1.uuid
+        ).first())
+
+
+class CohortsUpdateTests(CohortsTests):
+    def setUp(self):
+        self.view = RequestViewSet.as_view({'patch': 'partial_update'})
+        return super(RequestsUpdateTests, self).setUp()
+
+    def test_update_request_as_owner(self):
+        # As a user, I can update a cohort result I created
+        test_id = "other_id"
+        test_name = "New name"
+        test_description = "New description"
+        test_job_status = "finished"
+
+        request = self.factory.patch(COHORTS_URL, dict(
+            fhir_group_id=test_id,
+            name=test_name,
+            description=test_description,
+            request_job_status=test_description,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        cr = CohortResult.objects.get(uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        self.assertEqual(cr.fhir_group_id, test_id)
+        self.assertEqual(cr.name, test_name)
+        self.assertEqual(cr.description, test_description)
+        self.assertEqual(cr.request_job_status, test_job_status)
+
+    def test_error_update_request_as_not_owner(self):
+        # As a user, I cannot update another user's cohort result
+        test_id = "other_id"
+        request = self.factory.patch(COHORTS_URL, dict(
+            fhir_group_id=test_id,
+        ), format='json')
+        force_authenticate(request, self.user2)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content)
+        cr = CohortResult.objects.get(uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        self.assertIsNotEqual(cr.fhir_group_id, test_id)
+
+    def test_error_update_request_forbidden_fields(self):
+        # As a user, I cannot update owner in a cohort result I created
+        request = self.factory.patch(COHORTS_URL, dict(
+            owner=self.user2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot update request in a cohort result I created
+        request = self.factory.patch(COHORTS_URL, dict(
+            request=self.user1_req2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot update request_query_snapshot in a cohort result I created
+        request = self.factory.patch(COHORTS_URL, dict(
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot update dated_measure in a cohort result I created
+        request = self.factory.patch(COHORTS_URL, dict(
+            dated_measure=self.user1_req1_branch2_snap3_dm1.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot update type in a cohort result I created
+        request = self.factory.patch(COHORTS_URL, dict(
+            type="MY_PATIENTS",
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        cr = CohortResult.objects.get(uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        self.assertEqual(cr.owner_id, self.user1_req1_branch2_snap2_cr1.owner_id)
+        self.assertEqual(cr.request_id, self.user1_req1_branch2_snap2_cr1.request_id)
+        self.assertEqual(cr.request_query_snapshot_id, self.user1_req1_branch2_snap2_cr1.request_query_snapshot_id)
+        self.assertEqual(cr.dated_measure_id, self.user1_req1_branch2_snap2_cr1.dated_measure_id)
+        self.assertEqual(cr.type, self.user1_req1_branch2_snap2_cr1.type)

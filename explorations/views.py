@@ -64,27 +64,27 @@ class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
 
         return super(RequestQuerySnapshotViewSet, self).create(request, *args, **kwargs)
 
-    @action(detail=True, methods=['get'], permission_classes=(IsAdminOrOwner,), url_path="generate-result")
-    def generate_result(self, req, request_query_snapshot_uuid):
-        try:
-            rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
-        except RequestQuerySnapshot.DoesNotExist:
-            return Response({"response": "request_query_snapshot not found"},
-                            status=status.HTTP_404_NOT_FOUND)
-        rqr = rqs.generate_result()
-        return Response({'response': "Query successful!", 'data': DatedMeasureSerializer(rqr).data},
-                        status=status.HTTP_200_OK)
+    # @action(detail=True, methods=['get'], permission_classes=(IsAdminOrOwner,), url_path="generate-result")
+    # def generate_result(self, req, request_query_snapshot_uuid):
+    #     try:
+    #         rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
+    #     except RequestQuerySnapshot.DoesNotExist:
+    #         return Response({"response": "request_query_snapshot not found"},
+    #                         status=status.HTTP_404_NOT_FOUND)
+    #     rqr = rqs.generate_result()
+    #     return Response({'response': "Query successful!", 'data': DatedMeasureSerializer(rqr).data},
+    #                     status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['post'], permission_classes=(IsAdminOrOwner,), url_path="generate-cohort")
-    def generate_cohort(self, req, request_query_snapshot_uuid):
-        try:
-            rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
-        except RequestQuerySnapshot.DoesNotExist:
-            return Response({"response": "request_query_snapshot not found"},
-                            status=status.HTTP_404_NOT_FOUND)
-        c = rqs.generate_cohort(req["name"], req["description"])
-        return Response({'response': "Query successful!", 'data': CohortResultSerializer(c).data},
-                        status=status.HTTP_200_OK)
+    # @action(detail=True, methods=['post'], permission_classes=(IsAdminOrOwner,), url_path="generate-cohort")
+    # def generate_cohort(self, req, request_query_snapshot_uuid):
+    #     try:
+    #         rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
+    #     except RequestQuerySnapshot.DoesNotExist:
+    #         return Response({"response": "request_query_snapshot not found"},
+    #                         status=status.HTTP_404_NOT_FOUND)
+    #     c = rqs.generate_cohort(req["name"], req["description"])
+    #     return Response({'response': "Query successful!", 'data': CohortResultSerializer(c).data},
+    #                     status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], permission_classes=(IsAdminOrOwner,), url_path="save")
     def save(self, req, request_query_snapshot_uuid):
@@ -95,36 +95,6 @@ class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
                             status=status.HTTP_404_NOT_FOUND)
         rqs.save_snapshot()
         return Response({'response': "Query successful!"}, status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=['get'], permission_classes=(IsAdminOrOwner,), url_path="get-previous")
-    def get_previous(self, req, request_query_snapshot_uuid):
-        try:
-            rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
-        except RequestQuerySnapshot.DoesNotExist:
-            return Response({"response": "request_query_snapshot not found"},
-                            status=status.HTTP_404_NOT_FOUND)
-        prvs = rqs.previous_snapshot
-        if prvs is None:
-            return Response({'response': "request_query_snapshot has no previous snapshot"},
-                            status=status.HTTP_404_NOT_FOUND)
-        else:
-            return Response({'response': "Query successful!", 'data': prvs},
-                            status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=['get'], permission_classes=(IsAdminOrOwner,), url_path="get-next")
-    def get_next(self, request_query_snapshot_uuid):
-        try:
-            rqs = RequestQuerySnapshot.objects.get(uuid=request_query_snapshot_uuid)
-        except RequestQuerySnapshot.DoesNotExist:
-            return Response({"response": "request_query_snapshot not found"},
-                            status=status.HTTP_404_NOT_FOUND)
-        nxt = rqs.active_next_snapshot
-        if nxt is None:
-            return Response({'response': "request_query_snapshot has no active next snapshot"},
-                            status=status.HTTP_404_NOT_FOUND)
-        else:
-            return Response({'response': "Query successful!", 'data': nxt},
-                            status=status.HTTP_200_OK)
 
 
 class RequestViewSet(UserObjectsRestrictedViewSet):

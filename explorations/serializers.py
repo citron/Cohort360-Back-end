@@ -14,7 +14,7 @@ class CohortResultSerializer(BaseSerializer):
 
     class Meta:
         model = CohortResult
-        excluded = ["owner", "request"]
+        exclude = ["owner", "request"]
         read_only_fields = ["type", "result_size"]
 
 
@@ -26,7 +26,7 @@ class DatedMeasureSerializer(BaseSerializer):
 
     class Meta:
         model = DatedMeasure
-        excluded = ["request_query_snapshot", "request", "owner"]
+        exclude = ["request_query_snapshot", "request", "owner"]
 
 
 class RequestQuerySnapshotSerializer(BaseSerializer):
@@ -40,7 +40,7 @@ class RequestQuerySnapshotSerializer(BaseSerializer):
     class Meta:
         model = RequestQuerySnapshot
         fields = "__all__"
-        excluded = ["request", "owner"]
+        exclude = ["request", "owner"]
         read_only_fields = ["is_active_branch"]
 
     def create(self, validated_data):
@@ -58,4 +58,4 @@ class RequestSerializer(BaseSerializer):
 
     class Meta:
         model = Request
-        excluded = ["owner"]
+        exclude = ["owner"]

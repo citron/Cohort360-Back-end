@@ -19,6 +19,7 @@ from rest_framework import routers
 
 from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet, CohortResultViewSet, DatedMeasureViewSet
 
+
 router = routers.DefaultRouter()
 router.register(r'requests', RequestViewSet)
 router.register(r'request-query-snapshots', RequestQuerySnapshotViewSet)

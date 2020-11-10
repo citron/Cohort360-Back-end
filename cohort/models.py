@@ -5,6 +5,7 @@ from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, Permis
 from django.db import models
 
 from cohort.auth import IDServer
+from cohort_back.models import BaseModel
 
 
 def get_or_create_user(jwt_access_token):
@@ -38,15 +39,6 @@ class UserManager(BaseUserManager):
         user.save()
 
 
-class BaseModel(models.Model):
-    uuid = models.UUIDField(primary_key=True, default=uuid4, editable=False, auto_created=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        abstract = True
-
-
 class User(BaseModel, AbstractBaseUser):
     objects = UserManager()
 
@@ -63,9 +55,3 @@ class User(BaseModel, AbstractBaseUser):
 
     def is_admin(self):
         return self.is_superuser
-
-
-class Access(models.Model):
-    user = models.ForeignKey(User, related_name="accesses", on_delete=models.CASCADE)
-    care_site = models.ForeignKey()
-
