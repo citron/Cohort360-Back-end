@@ -72,7 +72,7 @@ class RequestQuerySnapshot(BaseModel):
     def active_next_snapshot(self):
         rqs_model = apps.get_model('explorations', 'RequestQuerySnapshot')
         next_snapshots = rqs_model.objects.filter(previous_snapshot=self)
-        return next_snapshots.filter(active=True).first()
+        return next_snapshots.filter(is_active_branch=True).first()
 
     def refresh(self):
         if self.refresh_create_cohort:

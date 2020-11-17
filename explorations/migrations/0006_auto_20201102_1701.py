@@ -100,13 +100,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='cohortresult',
             name='type',
-            field=models.CharField(choices=[('IMPORT_I2B2', 'Previous cohorts imported from i2b2.'), (
-                'MY_ORGANIZATIONS',
-                'Organizations in which I work (care sites with pseudo-anonymised reading rights).'), (
-                                                'MY_PATIENTS',
-                                                'Patients that passed by all my organizations (care sites with '
-                                                'nominative reading rights).'),
-                                            ('MY_COHORTS', 'Cohorts I created in Cohort360')], max_length=20),
+            field=models.CharField(choices=[('IMPORT_I2B2', 'Previous cohorts imported from i2b2.'), ('MY_ORGANIZATIONS', 'Organizations in which I work (care sites with pseudo-anonymised reading rights).'), ('MY_PATIENTS', 'Patients that passed by all my organizations (care sites with nominative reading rights).'), ('MY_COHORTS', 'Cohorts I created in Cohort360')], default='MY_COHORTS', max_length=20),
         ),
 
         migrations.AddField(

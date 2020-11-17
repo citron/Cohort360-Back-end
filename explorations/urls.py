@@ -16,13 +16,53 @@ Including another URLconf
 from django.urls import include, path
 
 from rest_framework import routers
+from rest_framework_extensions.routers import NestedRouterMixin
 
 from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet, CohortResultViewSet, DatedMeasureViewSet
 
 
-router = routers.DefaultRouter()
-router.register(r'requests', RequestViewSet)
-router.register(r'request-query-snapshots', RequestQuerySnapshotViewSet)
+class NestedDefaultRouter(NestedRouterMixin, routers.DefaultRouter):
+    pass
+
+
+router = NestedDefaultRouter()
+
+req_router = router.register(r'requests', RequestViewSet, basename="requests")
+req_router.register(
+    'query-snapshots',
+    RequestQuerySnapshotViewSet,
+    basename="request-request-query-snapshot",
+    parents_query_lookups=["request"]
+)
+
+req_router.register(
+    'dated-measures',
+    DatedMeasureViewSet,
+    basename="request-dated-measures",
+    parents_query_lookups=["request"]
+)
+req_router.register(
+    "cohorts",
+    CohortResultViewSet,
+    basename="request-cohot-results",
+    parents_query_lookups=["request"]
+)
+
+
+rqs_router = router.register(r'request-query-snapshots', RequestQuerySnapshotViewSet)
+rqs_router.register(
+    'dated-measures',
+    DatedMeasureViewSet,
+    basename="request-query-snapshot-dated-measures",
+    parents_query_lookups=["request_query_snapshot"]
+)
+rqs_router.register(
+    'cohorts',
+    CohortResultViewSet,
+    basename="request-query-snapshot-cohort-results",
+    parents_query_lookups=["request_query_snapshot"]
+)
+
 router.register(r'dated-measures', DatedMeasureViewSet)
 router.register(r'cohorts', CohortResultViewSet)
 

@@ -36,7 +36,7 @@ internal_urls = [
 
 urlpatterns = [
     url(r'^', include(router.urls)),
-    path("explorations/", include('explorations.urls')),
+    path("explorations/", include(('explorations.urls', 'explorations'), namespace="explorations")),
     url(r'^docs/', schema_view),
     url(r'^accounts/', include('rest_framework.urls')),
     url(r'^search/criteria/$', SearchCriteria.as_view(), name="search_criteria"),

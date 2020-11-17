@@ -6,9 +6,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.schemas import AutoSchema
 from rest_framework.views import APIView
+from rest_framework_extensions.mixins import NestedViewSetMixin
 
 from cohort.permissions import IsAdminOrOwner, OR, IsAdmin
 from cohort.views import UserObjectsRestrictedViewSet
+from cohort_back.views import NoDeleteViewSetMixin, NoUpdateViewSetMixin
 from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure
 from explorations.serializers import RequestSerializer, CohortResultSerializer, \
     RequestQuerySnapshotSerializer, DatedMeasureSerializer
@@ -22,30 +24,101 @@ from explorations.serializers import RequestSerializer, CohortResultSerializer, 
 # search_fields = ('user',) -> /api/users?search=russell
 
 
-class DatedMeasureViewSet(UserObjectsRestrictedViewSet):
+class CohortResultViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
+    queryset = CohortResult.objects.all()
+    serializer_class = CohortResultSerializer
+    http_method_names = ['get', 'post', 'patch', 'delete']
+    lookup_field = "uuid"
+
+    filterset_fields = ('uuid', 'name', 'favorite', 'request_query_snapshot_id',
+                        'request_id', 'fhir_group_id', 'type')
+    ordering_fields = ('created_at', 'modified_at',
+                       'name', 'favorite', 'type')
+    ordering = ('-created_at',)
+    search_fields = ('$name', '$description',)
+
+    def get_permissions(self):
+        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
+            return OR(IsAdminOrOwner())
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+
+        if 'owner_id' in request.data:
+            if request.data['owner_id'] != str(user.uuid):
+                return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            request.data['owner_id'] = str(user.uuid)
+
+        if 'dated_measure_id' not in request.data:
+            if 'dated_measure' in request.data:
+                dated_measure = request.data['dated_measure']
+                if not isinstance(dated_measure, dict):
+                    return Response({"message": "dated_measure should be an object"}, status=status.HTTP_400_BAD_REQUEST)
+                dated_measure["request_query_snapshot_id"] = request.data["request_query_snapshot_id"]
+                dated_measure["owner_id"] = str(user.uuid)
+
+        if "fhir_group_id" not in request.data:
+            request.data["fhir_group_id"] = ""
+
+        return super(CohortResultViewSet, self).create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        if getattr(instance, '_prefetched_objects_cache', None):
+            # If 'prefetch_related' has been applied to a queryset, we need to
+            # forcibly invalidate the prefetch cache on the instance.
+            instance._prefetched_objects_cache = {}
+
+        return Response(serializer.data)
+
+
+class DatedMeasureViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
     queryset = DatedMeasure.objects.all()
     serializer_class = DatedMeasureSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
+    lookup_field = "uuid"
 
-    filterset_fields = ('uuid',
-                        'request_query_snapshot_id', 'request_id', 'perimeter_id',
-                        'refresh_every_seconds', 'refresh_create_cohort')
-    ordering_fields = ('created_at', 'modified_at',
-                       'result_size', 'refresh_every_seconds')
+    filterset_fields = ('uuid', 'request_query_snapshot_id', 'request_id')
+    ordering_fields = ('created_at', 'modified_at', 'result_size')
     ordering = ('-created_at',)
     search_fields = []
 
     def get_permissions(self):
-        if self.request.method in ['GET']:
+        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
         else:
             return OR(IsAdmin())
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if CohortResult.objects.filter(dated_measure__uuid=instance.uuid).first() is not None:
+            return Response({'message': "Cannot delete a Dated measure that is binded to a cohort result"},
+                            status=status.HTTP_403_FORBIDDEN)
+        return super(DatedMeasureViewSet, self).destroy(request, *args, **kwargs)
 
-class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        if 'owner_id' in request.data:
+            if request.data['owner_id'] != str(user.uuid):
+                return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            request.data['owner_id'] = str(user.uuid)
+
+        return super(DatedMeasureViewSet, self).create(request, *args, **kwargs)
+
+
+class RequestQuerySnapshotViewSet(NestedViewSetMixin, NoDeleteViewSetMixin,
+                                  NoUpdateViewSetMixin, UserObjectsRestrictedViewSet):
     queryset = RequestQuerySnapshot.objects.all()
     serializer_class = RequestQuerySnapshotSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
+    lookup_field = "uuid"
 
     filterset_fields = ('uuid', 'request_id',)
     ordering_fields = ('created_at', 'modified_at',)
@@ -59,7 +132,10 @@ class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
     def create(self, request, *args, **kwargs):
         user = request.user
 
-        if 'owner_id' not in request.data:
+        if 'owner_id' in request.data:
+            if request.data['owner_id'] != str(user.uuid):
+                return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
+        else:
             request.data['owner_id'] = str(user.uuid)
 
         return super(RequestQuerySnapshotViewSet, self).create(request, *args, **kwargs)
@@ -97,13 +173,13 @@ class RequestQuerySnapshotViewSet(UserObjectsRestrictedViewSet):
         return Response({'response': "Query successful!"}, status=status.HTTP_200_OK)
 
 
-class RequestViewSet(UserObjectsRestrictedViewSet):
+class RequestViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
     queryset = Request.objects.all()
     serializer_class = RequestSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
+    lookup_field = "uuid"
 
-    filterset_fields = ('uuid', 'name', 'favorite',
-                        'exploration_id', 'data_type_of_query',)
+    filterset_fields = ('uuid', 'name', 'favorite', 'data_type_of_query',)
     ordering_fields = ('created_at', 'modified_at',
                        'name', 'favorite', 'data_type_of_query')
     ordering = ('name',)
@@ -115,7 +191,10 @@ class RequestViewSet(UserObjectsRestrictedViewSet):
 
     def create(self, request, *args, **kwargs):
         user = request.user
-        if 'owner_id' not in request.data:
+        if 'owner_id' in request.data:
+            if request.data['owner_id'] != str(user.uuid):
+                return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
+        else:
             request.data['owner_id'] = str(user.uuid)
 
         return super(RequestViewSet, self).create(request, *args, **kwargs)
@@ -130,31 +209,6 @@ class RequestViewSet(UserObjectsRestrictedViewSet):
         r = cr.check_request_status()
         return Response({'response': "Query successful!", 'data': r},
                         status=status.HTTP_200_OK)
-
-
-class CohortResultViewSet(UserObjectsRestrictedViewSet):
-    queryset = CohortResult.objects.all()
-    serializer_class = CohortResultSerializer
-    http_method_names = ['get', 'post', 'patch', 'delete']
-
-    filterset_fields = ('uuid', 'name', 'favorite',
-                        'request_query_snapshot_id',
-                        'request_id', 'perimeter_id', 'fhir_groups_ids', 'type')
-    ordering_fields = ('created_at', 'modified_at',
-                       'name', 'favorite', 'type', 'result_size')
-    ordering = ('-created_at',)
-    search_fields = ('$name', '$description',)
-
-    def get_permissions(self):
-        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
-            return OR(IsAdminOrOwner())
-
-    def create(self, request, *args, **kwargs):
-        user = request.user
-
-        if 'owner_id' not in request.data:
-            request.data['owner_id'] = str(user.uuid)
-        return super(CohortResultViewSet, self).create(request, *args, **kwargs)
 
 
 class SearchCriteria(APIView):
