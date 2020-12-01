@@ -14,27 +14,19 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.conf.urls import url
-from django.urls import include
+from django.urls import include, path
 
 from rest_framework import routers
 from rest_framework_swagger.views import get_swagger_view
 
 from cohort.views import UserViewSet
-from explorations.views import ExplorationViewSet, RequestViewSet, RequestQuerySnapshotViewSet, \
-    RequestQueryResultViewSet, \
-    CohortViewSet, SearchCriteria, PerimeterViewSet
+from explorations.views import SearchCriteria
 
 # Routers provide an easy way of automatically determining the URL conf.
 from voting.views import IssuePost, Thumbs, GitlabIssueViewSet
 
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet)
-router.register(r'perimeters', PerimeterViewSet)
-router.register(r'explorations', ExplorationViewSet)
-router.register(r'requests', RequestViewSet)
-router.register(r'request_query_snapshots', RequestQuerySnapshotViewSet)
-router.register(r'request_query_results', RequestQueryResultViewSet)
-router.register(r'cohorts', CohortViewSet)
 router.register(r'voting/issues', GitlabIssueViewSet)
 
 schema_view = get_swagger_view(title='Cohort360 API')
@@ -44,6 +36,7 @@ internal_urls = [
 
 urlpatterns = [
     url(r'^', include(router.urls)),
+    path("explorations/", include(('explorations.urls', 'explorations'), namespace="explorations")),
     url(r'^docs/', schema_view),
     url(r'^accounts/', include('rest_framework.urls')),
     url(r'^search/criteria/$', SearchCriteria.as_view(), name="search_criteria"),

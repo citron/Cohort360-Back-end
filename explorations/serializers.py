@@ -1,115 +1,192 @@
 from rest_framework import serializers
 
-from cohort.models import User, Perimeter
-from cohort.serializers import BaseSerializer
-from explorations.models import Exploration, Request, Cohort, RequestQuerySnapshot, RequestQueryResult
+from cohort.models import User
+from cohort.serializers import BaseSerializer, UserSerializer
+from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure
 
 
-class CohortSerializer(BaseSerializer):
-    name = serializers.CharField(max_length=30)
-    description = serializers.CharField(required=False)
-
-    request_query_snapshot_id = serializers.PrimaryKeyRelatedField(source='request_query_snapshot',
-                                                                   queryset=RequestQuerySnapshot.objects.all())
-    request_id = serializers.PrimaryKeyRelatedField(source='request', queryset=Request.objects.all())
-    perimeter_id = serializers.PrimaryKeyRelatedField(source='perimeter', queryset=Perimeter.objects.all())
-
-    fhir_groups_ids = serializers.CharField(read_only=True)
-
-    type = serializers.CharField(read_only=True)
-
-    result_size = serializers.IntegerField(read_only=True)
-
-    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
-
-    class Meta:
-        model = Cohort
-        fields = ("uuid", "created_at", "modified_at",
-                  "name", "description", 'favorite',
-                  "request_query_snapshot_id", "request_id", "perimeter_id",
-                  "result_size",
-                  "fhir_groups_ids", "type",
-                  "owner_id",)
+class PrimaryKeyRelatedFieldWithOwner(serializers.PrimaryKeyRelatedField):
+    def get_queryset(self):
+        user = self.context.get("request", None).user
+        if user is None:
+            raise Exception("Internal error: No context request provided to serializer")
+        qs = super(PrimaryKeyRelatedFieldWithOwner, self).get_queryset()
+        if user.is_superuser:
+            return qs
+        return qs.filter(owner=user)
 
 
-class RequestQueryResultSerializer(BaseSerializer):
-    request_query_snapshot_id = serializers.PrimaryKeyRelatedField(source='request_query_snapshot',
-                                                                   queryset=RequestQuerySnapshot.objects.all())
-    request_id = serializers.PrimaryKeyRelatedField(source='request', queryset=Request.objects.all())
-    perimeter_id = serializers.PrimaryKeyRelatedField(source='perimeter', queryset=Perimeter.objects.all())
-
-    result_size = serializers.IntegerField(read_only=True)
-
-    refresh_every_seconds = serializers.IntegerField(required=False)
-    refresh_create_cohort = serializers.BooleanField(required=False)
-
-    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
-
-    class Meta:
-        model = RequestQueryResult
-        fields = ("uuid", "created_at", "modified_at",
-                  "request_query_snapshot_id", "request_id", "perimeter_id",
-                  "result_size",
-                  "refresh_every_seconds", "refresh_create_cohort",
-                  "owner_id",)
-
-
-class RequestQuerySnapshotSerializer(BaseSerializer):
-    request_id = serializers.PrimaryKeyRelatedField(source='request', queryset=Request.objects.all())
-    serialized_query = serializers.CharField(required=False)
-
-    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
-
-    class Meta:
-        model = RequestQuerySnapshot
-        fields = ("uuid", "created_at", "modified_at",
-                  "request_id", "serialized_query",
-                  "owner_id",)
+class UserPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    def get_queryset(self):
+        user = self.context.get("request", None).user
+        if user is None:
+            raise Exception("Internal error: No context request provided to serializer")
+        qs = super(UserPrimaryKeyRelatedField, self).get_queryset()
+        if user.is_superuser:
+            return qs
+        return qs.filter(uuid=user.uuid)
 
 
 class RequestSerializer(BaseSerializer):
-    name = serializers.CharField(max_length=30)
-    description = serializers.CharField(required=False)
-    favorite = serializers.BooleanField(required=False)
-
-    exploration_id = serializers.PrimaryKeyRelatedField(source='exploration', queryset=Exploration.objects.all())
-
-    data_type_of_query = serializers.ChoiceField(Request.REQUEST_DATA_TYPE_CHOICES)
-
-    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
+    owner_id = UserPrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
 
     class Meta:
         model = Request
-        fields = ("uuid", "created_at", "modified_at",
-                  "name", "description", "favorite",
-                  "exploration_id",
-                  "data_type_of_query",
-                  "owner_id",)
+        exclude = ["owner"]
+
+    def update(self, instance, validated_data):
+        for f in ['owner']:
+            if f in validated_data:
+                raise serializers.ValidationError(f'{f} field cannot bu updated manually')
+        return super(RequestSerializer, self).update(instance, validated_data)
+
+    def partial_update(self, instance, validated_data):
+        for f in ['owner']:
+            if f in validated_data:
+                raise serializers.ValidationError(f'{f} field cannot bu updated manually')
+        return super(RequestSerializer, self).partial_update(instance, validated_data)
 
 
-class ExplorationSerializer(BaseSerializer):
-    name = serializers.CharField(max_length=30)
-    description = serializers.CharField(required=False)
-    favorite = serializers.BooleanField(required=False)
-
-    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
-
-    class Meta:
-        model = Exploration
-        fields = ("uuid", "created_at", "modified_at",
-                  "name", "description", "favorite",
-                  "owner_id",)
-
-
-class PerimeterSerializer(BaseSerializer):
-    name = serializers.CharField(max_length=30)
-    description = serializers.CharField(required=False)
-
-    data_type = serializers.ChoiceField(choices=Perimeter.PERIMETER_DATA_TYPE_CHOICES)
-    fhir_query = serializers.CharField()
-
-    owner_id = serializers.PrimaryKeyRelatedField(source='owner', queryset=User.objects.all())
+class RequestQuerySnapshotSerializer(BaseSerializer):
+    request_id = PrimaryKeyRelatedFieldWithOwner(source='request', queryset=Request.objects.all(), required=False)
+    owner_id = UserPrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
+    previous_snapshot_id = PrimaryKeyRelatedFieldWithOwner(
+        source='previous_snapshot', queryset=RequestQuerySnapshot.objects.all(), required=False
+    )
 
     class Meta:
-        model = Perimeter
-        fields = "__all__"
+        model = RequestQuerySnapshot
+        exclude = ["request", "owner"]
+        read_only_fields = ["is_active_branch"]
+
+    def create(self, validated_data):
+        previous_snapshot = validated_data.get("previous_snapshot", None)
+        request = validated_data.get("request", None)
+        if previous_snapshot is not None:
+            for rqs in previous_snapshot.next_snapshots.all():
+                rqs.active = False
+                rqs.save()
+            if request is not None and request.uuid != previous_snapshot.request.uuid:
+                raise serializers.ValidationError(
+                    "You cannot provide a request_id that is not the same as the id "
+                    "of the request binded to the previous_snapshot")
+            validated_data["request"] = previous_snapshot.request
+        elif request is not None:
+            if len(request.query_snapshots.all()) != 0:
+                raise serializers.ValidationError("You have to provide a previous_snapshot_id if the request is not"
+                                                  " empty of query snaphots")
+        else:
+            raise serializers.ValidationError(
+                "You have to provide a previous_snapshot_id or a request_id if the request "
+                "has not query snapshots binded to it yet")
+
+        return super(RequestQuerySnapshotSerializer, self).create(validated_data=validated_data)
+
+    def update(self, instance, validated_data):
+        for f in ['owner', 'request']:
+            if f in validated_data:
+                raise serializers.ValidationError(f'{f} field cannot bu updated manually')
+        return super(RequestQuerySnapshotSerializer, self).update(instance, validated_data)
+
+    def partial_update(self, instance, validated_data):
+        for f in ['owner', 'request']:
+            if f in validated_data:
+                raise serializers.ValidationError(f'{f} field cannot bu updated manually')
+        return super(RequestQuerySnapshotSerializer, self).partial_update(instance, validated_data)
+
+
+class DatedMeasureSerializer(BaseSerializer):
+    request_query_snapshot_id = PrimaryKeyRelatedFieldWithOwner(source='request_query_snapshot',
+                                                                queryset=RequestQuerySnapshot.objects.all())
+    request_id = PrimaryKeyRelatedFieldWithOwner(source='request', queryset=Request.objects.all(), required=False)
+    owner_id = UserPrimaryKeyRelatedField(source='owner', queryset=User.objects.all())
+
+    class Meta:
+        model = DatedMeasure
+        exclude = ["request_query_snapshot", "request", "owner"]
+
+    def update(self, instance, validated_data):
+        for f in ['owner', 'request', 'request_query_snapshot']:
+            if f in validated_data:
+                raise serializers.ValidationError(f'{f} field cannot bu updated manually')
+        return super(DatedMeasureSerializer, self).update(instance, validated_data)
+
+    def partial_update(self, instance, validated_data):
+        for f in ['owner', 'request', 'request_query_snapshot']:
+            if f in validated_data:
+                raise serializers.ValidationError(f'{f} field cannot bu updated manually')
+        return super(DatedMeasureSerializer, self).partial_update(instance, validated_data)
+
+    def create(self, validated_data):
+        rqs = validated_data.get("request_query_snapshot", None)
+        req = validated_data.get("request", None)
+        if rqs is not None:
+            if req is not None:
+                if req.uuid != rqs.request.uuid:
+                    raise serializers.ValidationError(
+                        "YOu cannot provide different from the one the query_snapshot is binded to")
+            else:
+                validated_data["request"] = rqs.request
+        else:
+            raise serializers.ValidationError("You have to provide a request_query_snapshot_id to bind the dated"
+                                              " measure to it")
+
+        return super(DatedMeasureSerializer, self).create(validated_data=validated_data)
+
+
+class CohortResultSerializer(BaseSerializer):
+    dated_measure_id = PrimaryKeyRelatedFieldWithOwner(source='dated_measure', queryset=DatedMeasure.objects.all(),
+                                                       required=False)
+    dated_measure = DatedMeasureSerializer(required=False)
+    request_query_snapshot_id = PrimaryKeyRelatedFieldWithOwner(source='request_query_snapshot',
+                                                                queryset=RequestQuerySnapshot.objects.all())
+    request_id = PrimaryKeyRelatedFieldWithOwner(source='request', queryset=Request.objects.all(), required=False)
+    owner_id = UserPrimaryKeyRelatedField(source='owner', queryset=User.objects.all())
+    owner = UserSerializer(required=False, read_only=True)
+    result_size = serializers.IntegerField(read_only=True)
+
+    fhir_group_id = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+
+    class Meta:
+        model = CohortResult
+        exclude = ["request_query_snapshot", "request"]
+
+    def update(self, instance, validated_data):
+        for f in ['owner', 'request', 'request_query_snapshot', 'dated_measure', 'type']:
+            if f in validated_data:
+                raise serializers.ValidationError(f'{f} field cannot be updated manually')
+        return super(CohortResultSerializer, self).update(instance, validated_data)
+
+    def partial_update(self, instance, validated_data):
+        for f in ['owner', 'request', 'request_query_snapshot', 'dated_measure', 'type']:
+            if f in validated_data:
+                raise serializers.ValidationError(f'{f} field cannot be updated manually')
+        return super(CohortResultSerializer, self).partial_update(instance, validated_data)
+
+    def create(self, validated_data):
+        rqs = validated_data.get("request_query_snapshot", None)
+        req = validated_data.get("request", None)
+        if rqs is not None:
+            if req is not None:
+                if req.uuid != rqs.request.uuid:
+                    raise serializers.ValidationError(
+                        "YOu cannot provide different from the one the query_snapshot is binded to")
+            else:
+                validated_data["request"] = rqs.request
+        else:
+            raise serializers.ValidationError("You have to provide a request_query_snapshot_id to bind the cohort"
+                                              " result to it")
+
+        dm = validated_data.pop("dated_measure", None)
+        if dm is not None:
+            dm_serializer = DatedMeasureSerializer(
+                data={
+                    **dm,
+                    "owner_id": dm["owner"].uuid, "request_query_snapshot_id": dm["request_query_snapshot"].uuid
+                }, context=self.context)
+            dm_serializer.is_valid(raise_exception=True)
+            dm = dm_serializer.save()
+            validated_data["dated_measure"] = dm
+
+        return super(CohortResultSerializer, self).create(validated_data=validated_data)
+

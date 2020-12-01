@@ -5,6 +5,7 @@ from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, Permis
 from django.db import models
 
 from cohort.auth import IDServer
+from cohort_back.models import BaseModel
 
 
 def get_or_create_user(jwt_access_token):
@@ -38,15 +39,6 @@ class UserManager(BaseUserManager):
         user.save()
 
 
-class BaseModel(models.Model):
-    uuid = models.UUIDField(primary_key=True, default=uuid4, editable=False, auto_created=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        abstract = True
-
-
 class User(BaseModel, AbstractBaseUser):
     objects = UserManager()
 
@@ -63,26 +55,3 @@ class User(BaseModel, AbstractBaseUser):
 
     def is_admin(self):
         return self.is_superuser
-
-
-class Perimeter(BaseModel):
-    """
-    A Perimeter contains either services or groups of patient
-    """
-    name = models.CharField(max_length=30)
-    description = models.TextField(blank=True)
-
-    PERIMETER_DATA_TYPE_CHOICES = [
-        ("GROUP", 'FHIR Group'),
-        ('ORG', 'FHIR Organization(s)')
-    ]
-    data_type = models.CharField(max_length=5, choices=PERIMETER_DATA_TYPE_CHOICES)
-    fhir_query = models.TextField()
-    # Either:
-    #  1. A Fhir Group : /Group/id
-    #  2. A list of FHIR Organizations : /PractionerRole/me
-
-    access_nominative = models.BooleanField()
-    access_pseudo_anonymised = models.BooleanField()
-
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='perimeters')
