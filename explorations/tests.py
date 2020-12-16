@@ -1,4 +1,3 @@
-import json
 from datetime import timedelta
 
 from django.urls import reverse
@@ -265,13 +264,11 @@ class RqsGetTests(RqsTests):
     def test_rest_get_list_from_request(self):
         # As a user, I can get the list of RQS from the Request they are binded to
         url = reverse(
-            'explorations:request-request-query-snapshot-list',
+            'explorations:request-request-query-snapshots-list',
             kwargs=dict(parent_lookup_request=self.user1_req1.uuid)
         )
-        request = self.factory.get(url)
-        force_authenticate(request, self.user1)
-        response = self.list_view(request)
-
+        self.client.force_login(self.user1)
+        response = self.client.get(url)
         response.render()
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
@@ -315,6 +312,50 @@ class RqsCreateTests(RqsTests):
             owner_id=self.user1.uuid,
             request_id=self.user1_req2.uuid,
             previous_snapshot_id=None
+        ).first()
+        self.assertIsNotNone(rqs)
+
+    def test_rest_create_rqs_from_request(self):
+        # As a user, I can create a rqs for a request that has no rqs yet, from request's url
+        test_sq = '{"test": "success"}'
+        url = reverse(
+            'explorations:request-request-query-snapshots-list',
+            kwargs=dict(parent_lookup_request=self.user1_req2.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.post(url, data=dict(
+            serialized_query=test_sq,
+        ), format='json')
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        rqs = RequestQuerySnapshot.objects.filter(
+            serialized_query=test_sq,
+            owner_id=self.user1.uuid,
+            request_id=self.user1_req2.uuid,
+            previous_snapshot_id=None
+        ).first()
+        self.assertIsNotNone(rqs)
+
+    def test_rest_create_next_rqs(self):
+        # As a user, I can create a rqs after one in the active branch of a request, from previous rqs' url
+        test_sq = '{"test": "success"}'
+        url = reverse(
+            'explorations:request-query-snapshot-next-snapshots-list',
+            kwargs=dict(parent_lookup_previous_snapshot_id=self.user1_req1_branch2_snap3.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.post(url, data=dict(
+            serialized_query=test_sq,
+        ), format='json')
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        rqs = RequestQuerySnapshot.objects.filter(
+            owner=self.user1,
+            previous_snapshot=self.user1_req1_branch2_snap3,
+            request=self.user1_req1,
+            serialized_query=test_sq,
         ).first()
         self.assertIsNotNone(rqs)
 
@@ -480,15 +521,58 @@ class DatedMeasuresGetTests(DatedMeasuresTests):
         self.check_get_response(response, dm_to_find)
 
     def test_rest_get_list_from_rqs(self):
-        # As a user, I can get the list of RQS from the Request they are binded to
+        # As a user, I can get the list of RQS from the rqs they are binded to
+        self.user1_req1_branch2_snap2_dm1 = DatedMeasure(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+            measure=10,
+            fhir_datetime=datetime.now(tz=timezone.utc) + timedelta(days=-2)
+        )
+        self.user1_req1_branch2_snap2_dm1.save()
+        url = reverse(
+            'explorations:request-query-snapshot-dated-measures-list',
+            kwargs=dict(parent_lookup_request_query_snapshot=self.user1_req1_branch2_snap3.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.get(url)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        rqs_to_find = [self.user1_req1_branch2_snap3_dm1, self.user1_req1_branch2_snap3_dm2]
+        self.check_get_response(response, rqs_to_find)
+
+    def test_rest_get_list_from_rqs_from_request(self):
+        # As a user, I can get the list of RQS from the rqs they are binded to
+        self.user1_req1_branch2_snap2_dm1 = DatedMeasure(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+            measure=10,
+            fhir_datetime=datetime.now(tz=timezone.utc) + timedelta(days=-2)
+        )
+        self.user1_req1_branch2_snap2_dm1.save()
+        url = reverse(
+            'explorations:request-request-query-snapshot-dated-measures-list',
+            kwargs=dict(parent_lookup_request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+                        parent_lookup_request=self.user1_req1.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.get(url)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        rqs_to_find = [self.user1_req1_branch2_snap3_dm1, self.user1_req1_branch2_snap3_dm2]
+        self.check_get_response(response, rqs_to_find)
+
+    def test_rest_get_list_from_request(self):
+        # As a user, I can get the list of dated_measure from the Request they are binded to
         url = reverse(
             'explorations:request-dated-measures-list',
-            kwargs=dict(parent_lookup_request=self.user1_req1_branch2_snap3.uuid)
+            kwargs=dict(parent_lookup_request=self.user1_req1.uuid)
         )
-        request = self.factory.get(url)
-        force_authenticate(request, self.user1)
-        response = self.list_view(request)
+        self.client.force_login(self.user1)
+        response = self.client.get(url)
         response.render()
+
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
         rqs_to_find = [self.user1_req1_branch2_snap3_dm1, self.user1_req1_branch2_snap3_dm2]
         self.check_get_response(response, rqs_to_find)
@@ -497,10 +581,12 @@ class DatedMeasuresGetTests(DatedMeasuresTests):
 class DatedMeasuresCreateTests(DatedMeasuresTests):
     def test_create_dm(self):
         # As a user, I can create a dated_measure for one request_query_snapshot
+        measure_test = 55
+        datetime_test = datetime.now()
         request = self.factory.post(DATED_MEASURES_URL, dict(
             request_query_snapshot_id=self.user1_req1_branch2_snap2.uuid,
-            measure=55,
-            fhir_datetime=datetime.now()
+            measure=measure_test,
+            fhir_datetime=datetime_test,
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.create_view(request)
@@ -508,9 +594,34 @@ class DatedMeasuresCreateTests(DatedMeasuresTests):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         rqs = DatedMeasure.objects.filter(
-            measure=55,
+            measure=measure_test,
             owner=self.user1,
             request_query_snapshot=self.user1_req1_branch2_snap2,
+            fhir_datetime=datetime_test,
+        ).first()
+        self.assertIsNotNone(rqs)
+
+    def test_rest_create_dm_from_rqs(self):
+        # As a user, I can create a dated_measure for one request_query_snapshot, from rsq' url
+        measure_test = 55
+        datetime_test = datetime.now()
+        url = reverse(
+            'explorations:request-query-snapshot-dated-measures-list',
+            kwargs=dict(parent_lookup_request_query_snapshot=self.user1_req1_branch2_snap2.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.post(url, data=dict(
+            measure=measure_test,
+            fhir_datetime=datetime_test,
+        ), format='json')
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        rqs = DatedMeasure.objects.filter(
+            measure=measure_test,
+            owner=self.user1,
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+            fhir_datetime=datetime_test,
         ).first()
         self.assertIsNotNone(rqs)
 
@@ -710,12 +821,20 @@ class CohortsTests(RqsTests):
             fhir_datetime=datetime.now(tz=timezone.utc) + timedelta(days=-2)
         )
         self.user1_req1_branch2_snap3_dm1.save()
+        self.user1_req1_branch2_snap3_dm2 = DatedMeasure(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            measure=20,
+            fhir_datetime=datetime.now(tz=timezone.utc) + timedelta(days=-1)
+        )
+        self.user1_req1_branch2_snap3_dm2.save()
 
         self.user1_req1_branch2_snap3_cr1 = CohortResult(
             owner=self.user1,
             request=self.user1_req1,
             request_query_snapshot=self.user1_req1_branch2_snap3,
-            fhir_group_id="group1",
+            fhir_group_id="group11231",
             dated_measure=self.user1_req1_branch2_snap3_dm1
         )
         self.user1_req1_branch2_snap3_cr1.save()
@@ -733,7 +852,7 @@ class CohortsTests(RqsTests):
             owner=self.user1,
             request=self.user1_req1,
             request_query_snapshot=self.user1_req1_branch2_snap2,
-            fhir_group_id="group2",
+            fhir_group_id="group11221",
             dated_measure=self.user1_req1_branch2_snap3_dm1
         )
         self.user1_req1_branch2_snap2_cr1.save()
@@ -751,7 +870,7 @@ class CohortsTests(RqsTests):
             owner=self.user2,
             request=self.user2_req1,
             request_query_snapshot=self.user2_req1_snap1,
-            fhir_group_id="group3",
+            fhir_group_id="group2111",
             dated_measure=self.user2_req1_snap1_dm1
         )
         self.user2_req1_snap1_cr1.save()
@@ -781,6 +900,83 @@ class CohortsGetTests(CohortsTests):
         response = self.retrieve_view(request, uuid=self.user2_req1_snap1_cr1.uuid)
         response.render()
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.content)
+
+    def test_rest_get_list_from_rqs(self):
+        # As a user, I can get the list of cohorts from the rqs they are binded to
+        self.user1_req1_branch2_snap3_cr2 = CohortResult(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            fhir_group_id="group25",
+            dated_measure=self.user1_req1_branch2_snap3_dm2
+        )
+        self.user1_req1_branch2_snap3_cr2.save()
+        url = reverse(
+            'explorations:request-query-snapshot-cohort-results-list',
+            kwargs=dict(parent_lookup_request_query_snapshot=self.user1_req1_branch2_snap3.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.get(url)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        rqs_to_find = [self.user1_req1_branch2_snap3_cr1, self.user1_req1_branch2_snap3_cr2]
+        self.check_get_response(response, rqs_to_find)
+
+    def test_rest_get_list_from_rqs_from_request(self):
+        # As a user, I can get the list of cohorts from the rqs they are binded to
+        self.user1_req1_branch2_snap3_cr2 = CohortResult(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            fhir_group_id="group25",
+            dated_measure=self.user1_req1_branch2_snap3_dm2
+        )
+        self.user1_req1_branch2_snap3_cr2.save()
+        url = reverse(
+            'explorations:request-request-query-snapshot-cohort-results-list',
+            kwargs=dict(parent_lookup_request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+                        parent_lookup_request=self.user1_req1.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.get(url)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        rqs_to_find = [self.user1_req1_branch2_snap3_cr1, self.user1_req1_branch2_snap3_cr2]
+        self.check_get_response(response, rqs_to_find)
+
+    def test_rest_get_list_from_request(self):
+        # As a user, I can get the list of cohorts from the Request they are binded to
+        self.user1_req1_branch2_snap3_cr2 = CohortResult(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            fhir_group_id="group11232",
+            dated_measure=self.user1_req1_branch2_snap3_dm2
+        )
+        self.user1_req1_branch2_snap3_cr2.save()
+        self.user1_req2_branch2_snap2_cr1 = CohortResult(
+            owner=self.user1,
+            request=self.user1_req2,
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+            fhir_group_id="group12221",
+            dated_measure=self.user1_req1_branch2_snap2_dm1
+        )
+        self.user1_req1_branch2_snap2_cr1.save()
+
+        url = reverse(
+            'explorations:request-cohort-results-list',
+            kwargs=dict(parent_lookup_request=self.user1_req1.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.get(url)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        rqs_to_find = [self.user1_req1_branch2_snap3_cr1, self.user1_req1_branch2_snap3_cr2,
+                       self.user1_req1_branch2_snap2_cr1]
+        self.check_get_response(response, rqs_to_find)
 
 
 class CohortsCreateTests(CohortsTests):
@@ -822,8 +1018,6 @@ class CohortsCreateTests(CohortsTests):
         # As a user, I can create a CohortResult
         test_name = "My new cohort"
         test_description = "Cohort I just did"
-        test_measure = 55
-        test_datetime = datetime.now().replace(tzinfo=timezone.utc)
 
         cohort = self.factory.post(COHORTS_URL, dict(
             name=test_name,
@@ -833,6 +1027,72 @@ class CohortsCreateTests(CohortsTests):
         ), format='json')
         force_authenticate(cohort, self.user1)
         response = self.create_view(cohort)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        cr = CohortResult.objects.filter(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            dated_measure=self.user1_req1_branch2_snap3_dm1.uuid
+        ).first()
+        self.assertIsNotNone(cr)
+
+    def test_rest_create_from_rqs(self):
+        # As a user, I can create a CohortResult, from the binded rqs' url
+        test_name = "My new cohort"
+        test_description = "Cohort I just did"
+        test_measure = 5985
+        test_datetime = datetime.now().replace(tzinfo=timezone.utc)
+        # Client() will use DjangoJsonEncoder for datetimes that will truncate microseconds
+        test_datetime = test_datetime.replace(microsecond=1000*(round(test_datetime.microsecond/1000)))
+
+        url = reverse(
+            'explorations:request-query-snapshot-cohort-results-list',
+            kwargs=dict(parent_lookup_request_query_snapshot=self.user1_req1_branch2_snap3.uuid)
+        )
+
+        self.client.force_login(self.user1)
+        response = self.client.post(url, data=dict(
+            name=test_name,
+            description=test_description,
+            dated_measure=dict(
+                measure=test_measure,
+                fhir_datetime=test_datetime,
+            )
+        ), content_type='application/json')
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        cr = CohortResult.objects.filter(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid
+        ).first()
+        self.assertIsNotNone(cr)
+
+        dm = DatedMeasure.objects.filter(
+            measure=test_measure,
+            fhir_datetime=test_datetime,
+        ).first()
+        self.assertIsNotNone(dm)
+
+    def test_rest_create_with_dm_id_from_rqs(self):
+        # As a user, I can create a CohortResult
+        test_name = "My new cohort"
+        test_description = "Cohort I just did"
+
+        url = reverse(
+            'explorations:request-query-snapshot-cohort-results-list',
+            kwargs=dict(parent_lookup_request_query_snapshot=self.user1_req1_branch2_snap3.uuid)
+        )
+
+        self.client.force_login(self.user1)
+        response = self.client.post(url, data=dict(
+            name=test_name,
+            description=test_description,
+            dated_measure_id=self.user1_req1_branch2_snap3_dm1.uuid
+        ), format='json')
         response.render()
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)

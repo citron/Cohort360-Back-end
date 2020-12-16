@@ -28,13 +28,12 @@ class NestedDefaultRouter(NestedRouterMixin, routers.DefaultRouter):
 router = NestedDefaultRouter()
 
 req_router = router.register(r'requests', RequestViewSet, basename="requests")
-req_router.register(
+req_rqs_router = req_router.register(
     'query-snapshots',
     RequestQuerySnapshotViewSet,
-    basename="request-request-query-snapshot",
+    basename="request-request-query-snapshots",
     parents_query_lookups=["request"]
 )
-
 req_router.register(
     'dated-measures',
     DatedMeasureViewSet,
@@ -44,17 +43,29 @@ req_router.register(
 req_router.register(
     "cohorts",
     CohortResultViewSet,
-    basename="request-cohot-results",
+    basename="request-cohort-results",
     parents_query_lookups=["request"]
 )
 
 
 rqs_router = router.register(r'request-query-snapshots', RequestQuerySnapshotViewSet)
 rqs_router.register(
+    'next-snapshots',
+    RequestQuerySnapshotViewSet,
+    basename="request-query-snapshot-next-snapshots",
+    parents_query_lookups=["previous_snapshot_id"]
+)
+rqs_router.register(
     'dated-measures',
     DatedMeasureViewSet,
     basename="request-query-snapshot-dated-measures",
     parents_query_lookups=["request_query_snapshot"]
+)
+req_rqs_router.register(
+    'dated-measures',
+    DatedMeasureViewSet,
+    basename="request-request-query-snapshot-dated-measures",
+    parents_query_lookups=["request", "request_query_snapshot"]
 )
 rqs_router.register(
     'cohorts',
@@ -62,9 +73,15 @@ rqs_router.register(
     basename="request-query-snapshot-cohort-results",
     parents_query_lookups=["request_query_snapshot"]
 )
+req_rqs_router.register(
+    'cohorts',
+    CohortResultViewSet,
+    basename="request-request-query-snapshot-cohort-results",
+    parents_query_lookups=["request", "request_query_snapshot"]
+)
 
-router.register(r'dated-measures', DatedMeasureViewSet)
-router.register(r'cohorts', CohortResultViewSet)
+router.register(r'dated-measures', DatedMeasureViewSet, basename="dated-measures")
+router.register(r'cohorts', CohortResultViewSet, basename="cohort-results")
 
 urlpatterns = [
     path('', include(router.urls)),
