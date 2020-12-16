@@ -1,3 +1,5 @@
+import json
+
 from rest_framework import serializers
 
 from cohort.models import User
@@ -135,9 +137,9 @@ class DatedMeasureSerializer(BaseSerializer):
 
 
 class CohortResultSerializer(BaseSerializer):
-    dated_measure_id = PrimaryKeyRelatedFieldWithOwner(source='dated_measure', queryset=DatedMeasure.objects.all(),
-                                                       required=False)
-    dated_measure = DatedMeasureSerializer(required=False)
+    dated_measure_id = PrimaryKeyRelatedFieldWithOwner(queryset=DatedMeasure.objects.all(),
+                                                       required=False, allow_null=True)
+    dated_measure = DatedMeasureSerializer(required=False, allow_null=True)
     request_query_snapshot_id = PrimaryKeyRelatedFieldWithOwner(source='request_query_snapshot',
                                                                 queryset=RequestQuerySnapshot.objects.all())
     request_id = PrimaryKeyRelatedFieldWithOwner(source='request', queryset=Request.objects.all(), required=False)
@@ -152,7 +154,7 @@ class CohortResultSerializer(BaseSerializer):
         exclude = ["request_query_snapshot", "request"]
 
     def update(self, instance, validated_data):
-        for f in ['owner', 'request', 'request_query_snapshot', 'dated_measure', 'type']:
+        for f in ['owner', 'request', 'request_query_snapshot', 'dated_measure', 'dated_measure_id', 'type']:
             if f in validated_data:
                 raise serializers.ValidationError(f'{f} field cannot be updated manually')
         return super(CohortResultSerializer, self).update(instance, validated_data)
@@ -177,16 +179,24 @@ class CohortResultSerializer(BaseSerializer):
             raise serializers.ValidationError("You have to provide a request_query_snapshot_id to bind the cohort"
                                               " result to it")
 
-        dm = validated_data.pop("dated_measure", None)
-        if dm is not None:
-            dm_serializer = DatedMeasureSerializer(
-                data={
-                    **dm,
-                    "owner_id": dm["owner"].uuid, "request_query_snapshot_id": dm["request_query_snapshot"].uuid
-                }, context=self.context)
-            dm_serializer.is_valid(raise_exception=True)
-            dm = dm_serializer.save()
-            validated_data["dated_measure"] = dm
+        dm = validated_data.pop("dated_measure_id", None)
+        if dm is None:
+            dm = validated_data.pop("dated_measure", None)
+            if dm is not None:
+                dm_serializer = DatedMeasureSerializer(
+                    data={
+                        **dm,
+                        "owner_id": dm["owner"].uuid, "request_query_snapshot_id": dm["request_query_snapshot"].uuid
+                    }, context=self.context)
+                dm_serializer.is_valid(raise_exception=True)
+                dm = dm_serializer.save()
+                validated_data["dated_measure"] = dm
+            else:
+                raise serializers.ValidationError(
+                    "You have to provide either dated_measure_id or a dated_measure object")
+        else:
+            # serializer will have retrieved the dated_measure matching the id
+            validated_data["dated_measure_id"] = dm.uuid
 
         return super(CohortResultSerializer, self).create(validated_data=validated_data)
 

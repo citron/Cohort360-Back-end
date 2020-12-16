@@ -818,6 +818,32 @@ class CohortsCreateTests(CohortsTests):
         ).first()
         self.assertIsNotNone(dm)
 
+    def test_create_with_dm_id(self):
+        # As a user, I can create a CohortResult
+        test_name = "My new cohort"
+        test_description = "Cohort I just did"
+        test_measure = 55
+        test_datetime = datetime.now().replace(tzinfo=timezone.utc)
+
+        cohort = self.factory.post(COHORTS_URL, dict(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot_id=self.user1_req1_branch2_snap3.uuid,
+            dated_measure_id=self.user1_req1_branch2_snap3_dm1.uuid
+        ), format='json')
+        force_authenticate(cohort, self.user1)
+        response = self.create_view(cohort)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        cr = CohortResult.objects.filter(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            dated_measure=self.user1_req1_branch2_snap3_dm1.uuid
+        ).first()
+        self.assertIsNotNone(cr)
+
     def test_error_create_with_forbidden_fields(self):
         test_name = "My new cohort"
         test_description = "Cohort I just did"
