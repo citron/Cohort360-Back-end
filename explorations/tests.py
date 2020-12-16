@@ -1,4 +1,3 @@
-import json
 from datetime import timedelta
 
 from django.urls import reverse
@@ -542,6 +541,28 @@ class DatedMeasuresGetTests(DatedMeasuresTests):
         rqs_to_find = [self.user1_req1_branch2_snap3_dm1, self.user1_req1_branch2_snap3_dm2]
         self.check_get_response(response, rqs_to_find)
 
+    def test_rest_get_list_from_rqs_from_request(self):
+        # As a user, I can get the list of RQS from the rqs they are binded to
+        self.user1_req1_branch2_snap2_dm1 = DatedMeasure(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap2,
+            measure=10,
+            fhir_datetime=datetime.now(tz=timezone.utc) + timedelta(days=-2)
+        )
+        self.user1_req1_branch2_snap2_dm1.save()
+        url = reverse(
+            'explorations:request-request-query-snapshot-dated-measures-list',
+            kwargs=dict(parent_lookup_request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+                        parent_lookup_request=self.user1_req1.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.get(url)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        rqs_to_find = [self.user1_req1_branch2_snap3_dm1, self.user1_req1_branch2_snap3_dm2]
+        self.check_get_response(response, rqs_to_find)
+
     def test_rest_get_list_from_request(self):
         # As a user, I can get the list of dated_measure from the Request they are binded to
         url = reverse(
@@ -893,6 +914,29 @@ class CohortsGetTests(CohortsTests):
         url = reverse(
             'explorations:request-query-snapshot-cohort-results-list',
             kwargs=dict(parent_lookup_request_query_snapshot=self.user1_req1_branch2_snap3.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.get(url)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        rqs_to_find = [self.user1_req1_branch2_snap3_cr1, self.user1_req1_branch2_snap3_cr2]
+        self.check_get_response(response, rqs_to_find)
+
+    def test_rest_get_list_from_rqs_from_request(self):
+        # As a user, I can get the list of cohorts from the rqs they are binded to
+        self.user1_req1_branch2_snap3_cr2 = CohortResult(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_branch2_snap3,
+            fhir_group_id="group25",
+            dated_measure=self.user1_req1_branch2_snap3_dm2
+        )
+        self.user1_req1_branch2_snap3_cr2.save()
+        url = reverse(
+            'explorations:request-request-query-snapshot-cohort-results-list',
+            kwargs=dict(parent_lookup_request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+                        parent_lookup_request=self.user1_req1.uuid)
         )
         self.client.force_login(self.user1)
         response = self.client.get(url)

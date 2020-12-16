@@ -1,6 +1,7 @@
 import coreapi
 import coreschema
-from rest_framework.decorators import permission_classes, action
+from django.http import QueryDict
+from rest_framework.decorators import action
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -16,15 +17,7 @@ from explorations.serializers import RequestSerializer, CohortResultSerializer, 
     RequestQuerySnapshotSerializer, DatedMeasureSerializer
 
 
-# Filtering/Ordering/Searching : https://www.django-rest-framework.org/api-guide/filtering/
-#
-# filterset_fields = ('category', 'in_stock',) -> /api/products?category=clothing&in_stock=True
-# ordering_fields = ('username',) -> /api/users?ordering=username
-# ordering = ('name',) -> This is the default ordering
-# search_fields = ('user',) -> /api/users?search=russell
-
-
-class CohortResultViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
+class CohortResultViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
     queryset = CohortResult.objects.all()
     serializer_class = CohortResultSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
@@ -43,6 +36,12 @@ class CohortResultViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
 
     def create(self, request, *args, **kwargs):
         user = request.user
+        if type(request.data) == QueryDict:
+            request.data._mutable = True
+        if 'parent_lookup_request_query_snapshot' in kwargs:
+            request.data["request_query_snapshot_id"] = kwargs['parent_lookup_request_query_snapshot']
+        if 'parent_lookup_request' in kwargs:
+            request.data["request_id"] = kwargs['parent_lookup_request']
 
         if 'owner_id' in request.data:
             if request.data['owner_id'] != str(user.uuid):
@@ -55,7 +54,8 @@ class CohortResultViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
                 dated_measure = request.data['dated_measure']
                 if not isinstance(dated_measure, dict):
                     return Response({"message": "dated_measure should be an object"}, status=status.HTTP_400_BAD_REQUEST)
-                dated_measure["request_query_snapshot_id"] = request.data["request_query_snapshot_id"]
+                if "request_query_snapshot_id" in request.data:
+                    dated_measure["request_query_snapshot_id"] = request.data["request_query_snapshot_id"]
                 dated_measure["owner_id"] = str(user.uuid)
 
         if "fhir_group_id" not in request.data:
@@ -78,7 +78,7 @@ class CohortResultViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
         return Response(serializer.data)
 
 
-class DatedMeasureViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
+class DatedMeasureViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
     queryset = DatedMeasure.objects.all()
     serializer_class = DatedMeasureSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
@@ -104,11 +104,19 @@ class DatedMeasureViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
 
     def create(self, request, *args, **kwargs):
         user = request.user
+        if type(request.data) == QueryDict:
+            request.data._mutable = True
+
         if 'owner_id' in request.data:
             if request.data['owner_id'] != str(user.uuid):
                 return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
         else:
             request.data['owner_id'] = str(user.uuid)
+
+        if 'parent_lookup_request_query_snapshot' in kwargs:
+            request.data["request_query_snapshot_id"] = kwargs['parent_lookup_request_query_snapshot']
+        if 'parent_lookup_request' in kwargs:
+            request.data["request_id"] = kwargs['parent_lookup_request']
 
         return super(DatedMeasureViewSet, self).create(request, *args, **kwargs)
 
@@ -131,6 +139,8 @@ class RequestQuerySnapshotViewSet(NestedViewSetMixin, NoDeleteViewSetMixin,
 
     def create(self, request, *args, **kwargs):
         user = request.user
+        if type(request.data) == QueryDict:
+            request.data._mutable = True
 
         if 'owner_id' in request.data:
             if request.data['owner_id'] != str(user.uuid):
@@ -138,7 +148,15 @@ class RequestQuerySnapshotViewSet(NestedViewSetMixin, NoDeleteViewSetMixin,
         else:
             request.data['owner_id'] = str(user.uuid)
 
+        if 'parent_lookup_request' in kwargs:
+            request.data["request_id"] = kwargs['parent_lookup_request']
+        if 'parent_lookup_previous_snapshot_id' in kwargs:
+            request.data["previous_snapshot_id"] = kwargs['parent_lookup_previous_snapshot_id']
+
         return super(RequestQuerySnapshotViewSet, self).create(request, *args, **kwargs)
+
+    def list(self, request, *args, **kwargs):
+        return super(RequestQuerySnapshotViewSet, self).list(request, *args, **kwargs)
 
     # @action(detail=True, methods=['get'], permission_classes=(IsAdminOrOwner,), url_path="generate-result")
     # def generate_result(self, req, request_query_snapshot_uuid):
@@ -173,7 +191,7 @@ class RequestQuerySnapshotViewSet(NestedViewSetMixin, NoDeleteViewSetMixin,
         return Response({'response': "Query successful!"}, status=status.HTTP_200_OK)
 
 
-class RequestViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
+class RequestViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
     queryset = Request.objects.all()
     serializer_class = RequestSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
@@ -191,6 +209,9 @@ class RequestViewSet(UserObjectsRestrictedViewSet, NestedViewSetMixin):
 
     def create(self, request, *args, **kwargs):
         user = request.user
+        if type(request.data) == QueryDict:
+            request.data._mutable = True
+
         if 'owner_id' in request.data:
             if request.data['owner_id'] != str(user.uuid):
                 return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
