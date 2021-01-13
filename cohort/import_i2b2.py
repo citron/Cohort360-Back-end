@@ -92,25 +92,23 @@ class OmopCareSiteCohort:
         self.name = sql_omop_res[1]
         self.cs_start_date = sql_omop_res[2]
         self.cs_end_date = sql_omop_res[3]
-        self.cs_manual_start_date = sql_omop_res[4]
-        self.cs_manual_end_date = sql_omop_res[5]
-        self.size = sql_omop_res[6]
-        self.care_site_id = sql_omop_res[7]
-        self.p_valid_start_datetime = sql_omop_res[8]
-        self.p_valid_end_datetime = sql_omop_res[9]
-        self.p_manual_valid_start_datetime = sql_omop_res[10]
-        self.p_manual_valid_end_datetime = sql_omop_res[11]
-        self.right_read_data_nominative = sql_omop_res[12]
-        self.right_read_data_pseudo_anonymised = sql_omop_res[13]
-        self.username = sql_omop_res[14]
-        self.creation_date = None
+        self.size = sql_omop_res[4]
+        self.care_site_id = sql_omop_res[5]
+        self.p_valid_start_datetime = sql_omop_res[6]
+        self.p_valid_end_datetime = sql_omop_res[7]
+        self.p_manual_valid_start_datetime = sql_omop_res[8]
+        self.p_manual_valid_end_datetime = sql_omop_res[9]
+        self.right_read_data_nominative = sql_omop_res[10]
+        self.right_read_data_pseudo_anonymised = sql_omop_res[11]
+        self.username = sql_omop_res[12]
+        self.creation_date = sql_omop_res[13]
 
 
 def get_user_care_sites_cohorts(users_ids_aph: [str]) -> [OmopCareSiteCohort]:
     tmp = get_multiple(
         """
         SELECT cd.cohort_definition_id,
-            cs.care_site_name, cs.start_date, cs.end_date, cs.manual_start_date, cs.manual_end_date,
+            cs.care_site_name, cs.valid_start_date, cs.valid_end_date,
             cd.cohort_size,
             cd.owner_entity_id,
             p.valid_start_datetime, p.valid_end_datetime, p.manual_valid_start_datetime, p.manual_valid_end_datetime,
