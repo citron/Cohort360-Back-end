@@ -5,6 +5,7 @@ from rest_framework.test import APIRequestFactory
 
 from cohort.models import User
 from cohort_back.models import BaseModel
+from cohort_back.celery import app as celery_app
 
 
 class ObjectView(object):
@@ -16,6 +17,7 @@ class BaseTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
         self.client = Client()  # useful for nested urls tests, because it uses reverse() function
+        celery_app.conf.update(CELERY_ALWAYS_EAGER=True)
 
         # USERS
         self.user1 = User.objects.create(

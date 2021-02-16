@@ -1,23 +1,27 @@
+from __future__ import annotations
 import json
 from datetime import date
-
 from django.apps import apps
 
 from cohort.models import User
 from django.db import models
 
-from cohort_back.FhirAPi import send_cohort_query, check_cohort_status, retrieve_cohort_result, send_cohort_count_query
 from cohort_back.models import BaseModel
+from cohort_back.settings import format_json_request
+
+PENDING_REQUEST_STATUS = "pending"
+STARTED_REQUEST_STATUS = "started"
+CANCELLED_REQUEST_STATUS = "cancelled"
+FINISHED_REQUEST_STATUS = "finished"
+FAILED_REQUEST_STATUS = "failed"
 
 REQUEST_STATUS_CHOICES = [
-    ("pending", "pending"),
-    ("started", "started"),
-    ("cancelled", "cancelled"),
-    ("finished", "finished")
+    (PENDING_REQUEST_STATUS, PENDING_REQUEST_STATUS),
+    (STARTED_REQUEST_STATUS, STARTED_REQUEST_STATUS),
+    (CANCELLED_REQUEST_STATUS, CANCELLED_REQUEST_STATUS),
+    (FAILED_REQUEST_STATUS, FAILED_REQUEST_STATUS),
+    (FINISHED_REQUEST_STATUS, FINISHED_REQUEST_STATUS)
 ]
-PENDING_REQUEST_STATUS = REQUEST_STATUS_CHOICES[0][0]
-STARTED_REQUEST_STATUS = REQUEST_STATUS_CHOICES[1][0]
-FINISHED_REQUEST_STATUS = REQUEST_STATUS_CHOICES[3][0]
 
 COHORT_TYPE_CHOICES = [
     ("IMPORT_I2B2", "Previous cohorts imported from i2b2.",),
@@ -60,7 +64,6 @@ class RequestQuerySnapshot(BaseModel):
 
     serialized_query = models.TextField(default="{}")
     refresh_every_seconds = models.BigIntegerField(default=0)
-    # refresh_intervale_seconds = models.BigIntegerField(default=0)
     refresh_create_cohort = models.BooleanField(default=False)
 
     previous_snapshot = models.ForeignKey("RequestQuerySnapshot", related_name="next_snapshots",
@@ -78,7 +81,7 @@ class RequestQuerySnapshot(BaseModel):
         if self.refresh_create_cohort:
             self.generate_cohort()
         else:
-            self.generate_result()
+            self.generate_measure()
 
     def save(self, *args, **kwargs):
         try:
@@ -96,13 +99,25 @@ class RequestQuerySnapshot(BaseModel):
         self.saved = True
         self.save()
 
-    def generate_result(self):
-        result = send_cohort_count_query(str(self.serialized_query))
-        dm = DatedMeasure()
-        dm.request_query_history = self
-        dm.request = self.request
-        dm.measure = result.size
+    def create_empty_dated_measure(self) -> DatedMeasure:
+        dm = DatedMeasure(
+            request_query_snapshot=self,
+            request=self.request,
+            owner=self.owner,
+        )
         dm.save()
+        return dm
+
+    def generate_measure(self, auth_headers) -> DatedMeasure:
+        dm = self.create_empty_dated_measure()
+
+        # import explorations.tasks as tasks
+        # task = tasks.get_count_task.delay(auth_headers, format_json_request(str(self.serialized_query)), dm.uuid)
+        from explorations.tasks import get_count_task
+        task = get_count_task.delay(auth_headers, format_json_request(str(self.serialized_query)), dm.uuid)
+        dm.count_task_id = task.id
+        dm.save()
+
         return dm
 
     def duplicate(self):
@@ -111,19 +126,32 @@ class RequestQuerySnapshot(BaseModel):
         new_self.save()
         return new_self
 
-    def generate_cohort(self, name: str = None, description: str = None):
-        dm = self.generate_result()
+    def generate_cohort(self, auth_headers, name: str = None, description: str = None, dm_uuid: str = ""):
+        if dm_uuid:
+            dm = DatedMeasure.objects.filter(uuid=dm_uuid).first()
+            if dm is None:
+                raise Exception(f"You provided a dated_measure_id '{dm_uuid}', but not dated_measure was found")
+        else:
+            dm = self.create_empty_dated_measure()
 
-        result = send_cohort_query(str(self.serialized_query))
-        c = CohortResult()
-        c.name = name or (self.request.name + date.today().strftime("%y%m%d"))
-        c.description = description or self.request.description
-        c.request_query_snapshot = self
-        c.request = self.request
-        c.dated_measure = dm
-        c.request_job_id = result.job_id
-        c.save()
-        return c
+        cr = CohortResult(
+            owner=self.owner,
+            request_query_snapshot=self,
+            request=self.request,
+            name=name or (self.request.name + date.today().strftime("%y%m%d")),
+            description=description or self.request.description,
+            dated_measure=dm
+        )
+        cr.save()
+
+        # import explorations.tasks as tasks
+        # task = tasks.create_cohort_task.delay(auth_headers, format_json_request(str(self.serialized_query)), cr.uuid)
+        from explorations.tasks import create_cohort_task
+        task = create_cohort_task.delay(auth_headers, format_json_request(str(self.serialized_query)), cr.uuid)
+        cr.create_task_id = task.id
+        cr.save()
+
+        return cr
 
 
 class DatedMeasure(BaseModel):
@@ -135,11 +163,15 @@ class DatedMeasure(BaseModel):
     request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE)
     request = models.ForeignKey(Request, on_delete=models.CASCADE)
 
-    fhir_datetime = models.DateTimeField(null=False, blank=False)
-    measure = models.BigIntegerField(null=False, blank=False)  # Size of potential cohort as returned by SolR
-    # perimeter = models.ForeignKey(Perimeter, on_delete=models.CASCADE)
+    fhir_datetime = models.DateTimeField(null=True, blank=False)
+    measure = models.BigIntegerField(null=True, blank=False)  # Size of potential cohort as returned by SolR
 
-    # result_size = models.BigIntegerField()  # Number of results as returned by SolR
+    count_task_id = models.TextField(blank=True)
+    request_job_id = models.TextField(blank=True)
+    request_job_status = models.CharField(max_length=10, choices=REQUEST_STATUS_CHOICES,
+                                          default=PENDING_REQUEST_STATUS)
+    request_job_fail_msg = models.TextField(blank=True)
+    request_job_duration = models.TextField(blank=True)
 
 
 class CohortResult(BaseModel):
@@ -155,28 +187,18 @@ class CohortResult(BaseModel):
     fhir_group_id = models.CharField(max_length=64, blank=True)
     dated_measure = models.ForeignKey(DatedMeasure, related_name="cohort", on_delete=models.PROTECT)
 
+    create_task_id = models.TextField(blank=True)
     request_job_id = models.TextField(blank=True)
     request_job_status = models.CharField(max_length=10, choices=REQUEST_STATUS_CHOICES,
                                           default=PENDING_REQUEST_STATUS)
+    request_job_fail_msg = models.TextField(blank=True)
+    request_job_duration = models.TextField(blank=True)
 
     # will depend on the right (pseudo-anonymised or nominative) you have on the care_site
     type = models.CharField(max_length=20, choices=COHORT_TYPE_CHOICES, default=MY_COHORTS_COHORT_TYPE)
-    # rqr = models.ForeignKey(RequestResult, on_delete=models.CASCADE)
 
     class Meta:
-        unique_together = [['owner', 'fhir_group_id', 'type']]
-
-    def check_request_status(self):
-        resp = check_cohort_status(str(self.request_job_id))
-        if resp.status == "finished":
-            self.retrieve_result()
-
-        return resp
-
-    def retrieve_result(self):
-        resp = retrieve_cohort_result(self.request_job_id)
-        self.fhir_group_id = resp.group_id
-        return resp
+        unique_together = []
 
     @property
     def result_size(self):

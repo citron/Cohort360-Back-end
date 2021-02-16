@@ -36,10 +36,13 @@ class CohortResultViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
 
     def create(self, request, *args, **kwargs):
         user = request.user
+
         if type(request.data) == QueryDict:
             request.data._mutable = True
+
         if 'parent_lookup_request_query_snapshot' in kwargs:
             request.data["request_query_snapshot_id"] = kwargs['parent_lookup_request_query_snapshot']
+
         if 'parent_lookup_request' in kwargs:
             request.data["request_id"] = kwargs['parent_lookup_request']
 
@@ -57,9 +60,6 @@ class CohortResultViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
                 if "request_query_snapshot_id" in request.data:
                     dated_measure["request_query_snapshot_id"] = request.data["request_query_snapshot_id"]
                 dated_measure["owner_id"] = str(user.uuid)
-
-        if "fhir_group_id" not in request.data:
-            request.data["fhir_group_id"] = ""
 
         return super(CohortResultViewSet, self).create(request, *args, **kwargs)
 

@@ -1,15 +1,19 @@
 from datetime import timedelta
+from unittest import mock
 
+from celery.result import AsyncResult
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.datetime_safe import datetime
 from rest_framework import status
 from rest_framework.test import force_authenticate
 
+from cohort_back.FhirAPi import FhirValidateResponse, FhirCountResponse, FhirCohortResponse
 from cohort_back.tests import BaseTests
-from explorations.models import Request, RequestQuerySnapshot, DatedMeasure, CohortResult
+from explorations.models import Request, RequestQuerySnapshot, DatedMeasure, CohortResult, PENDING_REQUEST_STATUS, \
+    FINISHED_REQUEST_STATUS, FAILED_REQUEST_STATUS
+from explorations.tasks import get_count_task, create_cohort_task
 from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet, DatedMeasureViewSet, CohortResultViewSet
-
 
 EXPLORATIONS_URL = "/explorations"
 REQUESTS_URL = f"{EXPLORATIONS_URL}/requests"
@@ -262,7 +266,7 @@ class RqsGetTests(RqsTests):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.content)
 
     def test_rest_get_list_from_request(self):
-        # As a user, I can get the list of RQS from the Request they are binded to
+        # As a user, I can get the list of RQS from the Request they are bound to
         url = reverse(
             'explorations:request-request-query-snapshots-list',
             kwargs=dict(parent_lookup_request=self.user1_req1.uuid)
@@ -278,10 +282,15 @@ class RqsGetTests(RqsTests):
 
 
 class RqsCreateTests(RqsTests):
-    def test_create_rqs_after_another(self):
+    @mock.patch('explorations.serializers.fhir_api')
+    def test_create_rqs_after_another(self, mock_fhir_api):
         # As a user, I can create a rqs after one in the active branch of a request
+        mock_fhir_api.post_validate_cohort.return_value = FhirValidateResponse(True)
+        test_sq = '{"test": "success"}'
+
         request = self.factory.post(RQS_URL, dict(
             previous_snapshot_id=self.user1_req1_branch2_snap3.uuid,
+            serialized_query=test_sq,
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.create_view(request)
@@ -289,14 +298,43 @@ class RqsCreateTests(RqsTests):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         rqs = RequestQuerySnapshot.objects.filter(
+            serialized_query=test_sq,
             owner=self.user1,
             previous_snapshot=self.user1_req1_branch2_snap3,
             request=self.user1_req1
         ).first()
         self.assertIsNotNone(rqs)
+        mock_fhir_api.post_validate_cohort.assert_called_once()
 
-    def test_create_rqs_on_users_empty_request(self):
+    @mock.patch('explorations.serializers.fhir_api')
+    def test_error_create_unvalid_query(self, mock_fhir_api):
+        # As a user, I can create a rqs after one in the active branch of a request
+        mock_fhir_api.post_validate_cohort.return_value = FhirValidateResponse(False)
+        test_sq = '{"test": "success"}'
+
+        request = self.factory.post(RQS_URL, dict(
+            previous_snapshot_id=self.user1_req1_branch2_snap3.uuid,
+            serialized_query=test_sq,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        rqs = RequestQuerySnapshot.objects.filter(
+            owner=self.user1,
+            serialized_query=test_sq,
+            previous_snapshot=self.user1_req1_branch2_snap3,
+            request=self.user1_req1
+        ).first()
+        self.assertIsNone(rqs)
+        mock_fhir_api.post_validate_cohort.assert_called_once()
+
+    @mock.patch('explorations.serializers.fhir_api')
+    def test_create_rqs_on_users_empty_request(self, mock_fhir_api):
         # As a user, I can create a rqs for a request that has no rqs yet
+        mock_fhir_api.post_validate_cohort.return_value = FhirValidateResponse(True)
+
         test_sq = '{"test": "success"}'
         request = self.factory.post(RQS_URL, dict(
             request_id=self.user1_req2.uuid,
@@ -314,10 +352,14 @@ class RqsCreateTests(RqsTests):
             previous_snapshot_id=None
         ).first()
         self.assertIsNotNone(rqs)
+        mock_fhir_api.post_validate_cohort.assert_called_once()
 
-    def test_rest_create_rqs_from_request(self):
+    @mock.patch('explorations.serializers.fhir_api')
+    def test_rest_create_rqs_from_request(self, mock_fhir_api):
         # As a user, I can create a rqs for a request that has no rqs yet, from request's url
+        mock_fhir_api.post_validate_cohort.return_value = FhirValidateResponse(True)
         test_sq = '{"test": "success"}'
+
         url = reverse(
             'explorations:request-request-query-snapshots-list',
             kwargs=dict(parent_lookup_request=self.user1_req2.uuid)
@@ -336,9 +378,12 @@ class RqsCreateTests(RqsTests):
             previous_snapshot_id=None
         ).first()
         self.assertIsNotNone(rqs)
+        mock_fhir_api.post_validate_cohort.assert_called_once()
 
-    def test_rest_create_next_rqs(self):
+    @mock.patch('explorations.serializers.fhir_api')
+    def test_rest_create_next_rqs(self, mock_fhir_api):
         # As a user, I can create a rqs after one in the active branch of a request, from previous rqs' url
+        mock_fhir_api.post_validate_cohort.return_value = FhirValidateResponse(True)
         test_sq = '{"test": "success"}'
         url = reverse(
             'explorations:request-query-snapshot-next-snapshots-list',
@@ -358,6 +403,7 @@ class RqsCreateTests(RqsTests):
             serialized_query=test_sq,
         ).first()
         self.assertIsNotNone(rqs)
+        mock_fhir_api.post_validate_cohort.assert_called_once()
 
     def test_error_create_rqs_with_forbidden_access(self):
         forbidden_sq = '{"test": "forbidden"}'
@@ -388,7 +434,7 @@ class RqsCreateTests(RqsTests):
         request = self.factory.post(RQS_URL, dict(
             previous_snapshot_id=self.user1_req1_branch2_snap3.uuid,
             owner_id=self.user2.uuid,
-            serialized_query = forbidden_sq,
+            serialized_query=forbidden_sq,
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.create_view(request)
@@ -521,7 +567,7 @@ class DatedMeasuresGetTests(DatedMeasuresTests):
         self.check_get_response(response, dm_to_find)
 
     def test_rest_get_list_from_rqs(self):
-        # As a user, I can get the list of RQS from the rqs they are binded to
+        # As a user, I can get the list of RQS from the rqs they are bound to
         self.user1_req1_branch2_snap2_dm1 = DatedMeasure(
             owner=self.user1,
             request=self.user1_req1,
@@ -542,7 +588,7 @@ class DatedMeasuresGetTests(DatedMeasuresTests):
         self.check_get_response(response, rqs_to_find)
 
     def test_rest_get_list_from_rqs_from_request(self):
-        # As a user, I can get the list of RQS from the rqs they are binded to
+        # As a user, I can get the list of RQS from the rqs they are bound to
         self.user1_req1_branch2_snap2_dm1 = DatedMeasure(
             owner=self.user1,
             request=self.user1_req1,
@@ -564,7 +610,7 @@ class DatedMeasuresGetTests(DatedMeasuresTests):
         self.check_get_response(response, rqs_to_find)
 
     def test_rest_get_list_from_request(self):
-        # As a user, I can get the list of dated_measure from the Request they are binded to
+        # As a user, I can get the list of dated_measure from the Request they are bound to
         url = reverse(
             'explorations:request-dated-measures-list',
             kwargs=dict(parent_lookup_request=self.user1_req1.uuid)
@@ -579,29 +625,47 @@ class DatedMeasuresGetTests(DatedMeasuresTests):
 
 
 class DatedMeasuresCreateTests(DatedMeasuresTests):
-    def test_create_dm(self):
+    @mock.patch('explorations.tasks.get_count_task.delay')
+    def test_create_dm(self, count_task_delay):
         # As a user, I can create a dated_measure for one request_query_snapshot
+        # Some fields are read only
         measure_test = 55
         datetime_test = datetime.now()
+
+        read_only_fields = dict(
+            count_task_id="test_task_id",
+            request_job_id="test_job_id",
+            request_job_status=FAILED_REQUEST_STATUS,
+            request_job_fail_msg="test_fail_msg",
+            request_job_duration=1001,
+        )
+
         request = self.factory.post(DATED_MEASURES_URL, dict(
             request_query_snapshot_id=self.user1_req1_branch2_snap2.uuid,
             measure=measure_test,
             fhir_datetime=datetime_test,
+            **read_only_fields
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.create_view(request)
         response.render()
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
-        rqs = DatedMeasure.objects.filter(
+        count_task_delay.assert_not_called()
+
+        dm = DatedMeasure.objects.filter(
             measure=measure_test,
             owner=self.user1,
             request_query_snapshot=self.user1_req1_branch2_snap2,
             fhir_datetime=datetime_test,
         ).first()
-        self.assertIsNotNone(rqs)
+        self.assertIsNotNone(dm)
 
-    def test_rest_create_dm_from_rqs(self):
+        for read_only_field, val in read_only_fields.items():
+            self.assertNotEqual(getattr(dm, read_only_field, None), val, f"With field {read_only_field}: {val}")
+
+    @mock.patch('explorations.tasks.get_count_task.delay')
+    def test_rest_create_dm_from_rqs(self, count_task_delay):
         # As a user, I can create a dated_measure for one request_query_snapshot, from rsq' url
         measure_test = 55
         datetime_test = datetime.now()
@@ -617,6 +681,8 @@ class DatedMeasuresCreateTests(DatedMeasuresTests):
         response.render()
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        count_task_delay.assert_not_called()
+
         rqs = DatedMeasure.objects.filter(
             measure=measure_test,
             owner=self.user1,
@@ -625,21 +691,40 @@ class DatedMeasuresCreateTests(DatedMeasuresTests):
         ).first()
         self.assertIsNotNone(rqs)
 
-    def test_error_create_dm_with_forbidden_access(self):
+    @mock.patch('explorations.tasks.get_count_task.delay')
+    def test_create_dm_via_fhir(self, count_task_delay):
+        # As a user, I can create a dm without specifying a measure, it will ask FHIR back-end for the answer
+        test_task_id = "test_id"
+
+        request = self.factory.post(DATED_MEASURES_URL, dict(
+            request_query_snapshot_id=self.user1_req1_branch2_snap2.uuid
+        ), format='json')
+
+        mocked_task_async_result = AsyncResult(id=test_task_id)
+        count_task_delay.return_value = mocked_task_async_result
+
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        count_task_delay.assert_called_once()
+
+        self.assertIsNotNone(
+            DatedMeasure.objects.filter(
+                owner=self.user1,
+                request_query_snapshot=self.user1_req1_branch2_snap2,
+                count_task_id=test_task_id,
+                request_job_status=PENDING_REQUEST_STATUS
+            ).first()
+        )
+
+    @mock.patch('explorations.tasks.get_count_task.delay')
+    def test_error_create_dm_with_forbidden_access(self, count_task_delay):
         forbidden_test_measure = 55
         forbidden_time = datetime.now().replace(tzinfo=timezone.utc)
 
-        # As a user, I cannot create a dm without specifying a measure
-        request = self.factory.post(DATED_MEASURES_URL, dict(
-            request_query_snapshot_id=self.user1_req1_branch2_snap2.uuid,
-            fhir_datetime=forbidden_time
-        ), format='json')
-        force_authenticate(request, self.user1)
-        response = self.create_view(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
-
-        # As a user, I cannot create a dm without specifying a fhir_datetime
+        # As a user, I cannot create a dm without specifying a fhir_datetime, if I specify a measure
         request = self.factory.post(DATED_MEASURES_URL, dict(
             request_query_snapshot_id=self.user1_req1_branch2_snap2.uuid,
             measure=forbidden_test_measure,
@@ -649,29 +734,27 @@ class DatedMeasuresCreateTests(DatedMeasuresTests):
         response.render()
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
 
-        # As a user, I cannot create a rqs specifying another owner
-        request = self.factory.post(DATED_MEASURES_URL, dict(
-            request_query_snapshot_id=self.user1_req1_branch2_snap2.uuid,
-            measure=forbidden_test_measure,
-            fhir_datetime=forbidden_time,
-            owner_id=self.user2.uuid
-        ), format='json')
-        force_authenticate(request, self.user1)
-        response = self.create_view(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        # As a user, I cannot create a cohort result while specifying
+        forbidden_fields = dict(
+            owner_id=[self.user2.uuid],                     # a wrong owner
+            request_id=[self.user1_req2.uuid],              # a wrong request
+        )
 
-        # As a user, I cannot create a rqs specifying a request not matching the rqs
-        request = self.factory.post(DATED_MEASURES_URL, dict(
-            request_query_snapshot_id=self.user1_req1_branch2_snap2.uuid,
-            measure=forbidden_test_measure,
-            fhir_datetime=forbidden_time,
-            request_id=self.user1_req2.uuid
-        ), format='json')
-        force_authenticate(request, self.user1)
-        response = self.create_view(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        for field, vals in forbidden_fields.items():
+            for val in vals:
+                data = dict(
+                    request_query_snapshot_id=self.user1_req1_branch2_snap2.uuid,
+                    measure=forbidden_test_measure,
+                    fhir_datetime=forbidden_time,
+                )
+                data[field] = val
+
+                request = self.factory.post(COHORTS_URL, data, format='json')
+                force_authenticate(request, self.user1)
+                response = self.create_view(request)
+                response.render()
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST,
+                                 f"With field {field}: {val}. Content: {response.content}")
 
         self.assertIsNone(DatedMeasure.objects.filter(
             measure=forbidden_test_measure
@@ -679,8 +762,10 @@ class DatedMeasuresCreateTests(DatedMeasuresTests):
         self.assertIsNone(DatedMeasure.objects.filter(
             fhir_datetime=forbidden_time
         ).first())
+        count_task_delay.assert_not_called()
 
-    def test_error_create_dm_on_rqs_not_owned(self):
+    @mock.patch('explorations.tasks.get_count_task.delay')
+    def test_error_create_dm_on_rqs_not_owned(self, count_task_delay):
         # As a user, I cannot create a dm on a Rqs I don't own
         forbidden_test_measure = 55
 
@@ -688,6 +773,15 @@ class DatedMeasuresCreateTests(DatedMeasuresTests):
             request_query_snapshot_id=self.user2_req1_snap1_dm1.uuid,
             measure=forbidden_test_measure,
             fhir_datetime=datetime.now()
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # even if created using fhir API
+        request = self.factory.post(DATED_MEASURES_URL, dict(
+            request_query_snapshot_id=self.user2_req1_snap1_dm1.uuid,
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.create_view(request)
@@ -711,7 +805,7 @@ class DatedMeasuresDeleteTests(DatedMeasuresTests):
         self.user1_req1_branch2_snap3_cohort1.save()
 
     def test_delete_owned_dm_without_cohort(self):
-        # As a user, I can delete a dated measure I owned, not binded to a CohortResult
+        # As a user, I can delete a dated measure I owned, not bound to a CohortResult
         request = self.factory.delete(DATED_MEASURES_URL)
         force_authenticate(request, self.user1)
         response = self.delete_view(request, uuid=self.user1_req1_branch2_snap3_dm2.uuid)
@@ -721,7 +815,7 @@ class DatedMeasuresDeleteTests(DatedMeasuresTests):
         self.assertIsNone(DatedMeasure.objects.filter(uuid=self.user1_req1_branch2_snap3.uuid).first())
 
     def test_error_delete_owned_dm_with_cohort(self):
-        # As a user, I cannot delete a dated measure binded to a CohortResult
+        # As a user, I cannot delete a dated measure bound to a CohortResult
         request = self.factory.delete(DATED_MEASURES_URL)
         force_authenticate(request, self.user1)
         response = self.delete_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
@@ -747,9 +841,19 @@ class DatedMeasuresUpdateTests(DatedMeasuresTests):
         new_measure = 55
         new_datetime = datetime.now().replace(tzinfo=timezone.utc)
 
+        # Some fields are read only
+        read_only_fields = dict(
+            create_task_id="test_task_id",
+            request_job_id="test_job_id",
+            request_job_status=FINISHED_REQUEST_STATUS,
+            request_job_fail_msg="test_fail_msg",
+            request_job_duration=1001,
+        )
+
         request = self.factory.patch(DATED_MEASURES_URL, dict(
             measure=new_measure,
             fhir_datetime=new_datetime,
+            **read_only_fields
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.update_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
@@ -759,6 +863,9 @@ class DatedMeasuresUpdateTests(DatedMeasuresTests):
         dm = DatedMeasure.objects.get(uuid=self.user1_req1_branch2_snap3_dm1.uuid)
         self.assertEqual(dm.measure, new_measure)
         self.assertEqual(dm.fhir_datetime, new_datetime)
+
+        for read_only_field, val in read_only_fields.items():
+            self.assertNotEqual(getattr(dm, read_only_field, None), val, f"With field {read_only_field}: {val}")
 
     def test_error_update_dm_as_not_owner(self):
         # As a user, I cannot update a dated_measure I don't own
@@ -902,7 +1009,7 @@ class CohortsGetTests(CohortsTests):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.content)
 
     def test_rest_get_list_from_rqs(self):
-        # As a user, I can get the list of cohorts from the rqs they are binded to
+        # As a user, I can get the list of cohorts from the rqs they are bound to
         self.user1_req1_branch2_snap3_cr2 = CohortResult(
             owner=self.user1,
             request=self.user1_req1,
@@ -924,7 +1031,7 @@ class CohortsGetTests(CohortsTests):
         self.check_get_response(response, rqs_to_find)
 
     def test_rest_get_list_from_rqs_from_request(self):
-        # As a user, I can get the list of cohorts from the rqs they are binded to
+        # As a user, I can get the list of cohorts from the rqs they are bound to
         self.user1_req1_branch2_snap3_cr2 = CohortResult(
             owner=self.user1,
             request=self.user1_req1,
@@ -947,7 +1054,7 @@ class CohortsGetTests(CohortsTests):
         self.check_get_response(response, rqs_to_find)
 
     def test_rest_get_list_from_request(self):
-        # As a user, I can get the list of cohorts from the Request they are binded to
+        # As a user, I can get the list of cohorts from the Request they are bound to
         self.user1_req1_branch2_snap3_cr2 = CohortResult(
             owner=self.user1,
             request=self.user1_req1,
@@ -980,12 +1087,23 @@ class CohortsGetTests(CohortsTests):
 
 
 class CohortsCreateTests(CohortsTests):
-    def test_create(self):
+    @mock.patch('explorations.tasks.create_cohort_task.delay')
+    def test_create(self, create_task_delay):
         # As a user, I can create a CohortResult
+        # Some fields are read only
         test_name = "My new cohort"
         test_description = "Cohort I just did"
         test_measure = 55
         test_datetime = datetime.now().replace(tzinfo=timezone.utc)
+        test_fhir_group_id = "group_id"
+
+        read_only_fields = dict(
+            create_task_id="test_task_id",
+            request_job_id="test_job_id",
+            request_job_status=FINISHED_REQUEST_STATUS,
+            request_job_fail_msg="test_fail_msg",
+            request_job_duration=1001,
+        )
 
         cohort = self.factory.post(COHORTS_URL, dict(
             name=test_name,
@@ -994,17 +1112,22 @@ class CohortsCreateTests(CohortsTests):
             dated_measure=dict(
                 measure=test_measure,
                 fhir_datetime=test_datetime,
-            )
+            ),
+            fhir_group_id=test_fhir_group_id,
+            **read_only_fields
         ), format='json')
         force_authenticate(cohort, self.user1)
         response = self.create_view(cohort)
         response.render()
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        create_task_delay.assert_not_called()
+
         cr = CohortResult.objects.filter(
             name=test_name,
             description=test_description,
-            request_query_snapshot=self.user1_req1_branch2_snap3.uuid
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            fhir_group_id=test_fhir_group_id
         ).first()
         self.assertIsNotNone(cr)
 
@@ -1014,10 +1137,86 @@ class CohortsCreateTests(CohortsTests):
         ).first()
         self.assertIsNotNone(dm)
 
-    def test_create_with_dm_id(self):
-        # As a user, I can create a CohortResult
+        for read_only_field, val in read_only_fields.items():
+            self.assertNotEqual(getattr(dm, read_only_field, None), val, f"With field {read_only_field}: {val}")
+
+    @mock.patch('explorations.tasks.create_cohort_task.delay')
+    def test_create_with_fhir(self, create_task_delay):
+        # As a user, I can create a CohortResult without providing group_id
+        # Fhir API will then be called in create_task
         test_name = "My new cohort"
         test_description = "Cohort I just did"
+        test_task_id = "test_id"
+
+        mocked_task_async_result = AsyncResult(id=test_task_id)
+        create_task_delay.return_value = mocked_task_async_result
+
+        cohort = self.factory.post(COHORTS_URL, dict(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot_id=self.user1_req1_branch2_snap3.uuid,
+        ), format='json')
+        force_authenticate(cohort, self.user1)
+        response = self.create_view(cohort)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        create_task_delay.assert_called_once()
+
+        cr = CohortResult.objects.filter(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            create_task_id=test_task_id,
+            request_job_status=PENDING_REQUEST_STATUS
+        ).first()
+        self.assertIsNotNone(cr)
+        self.assertIsNone(cr.dated_measure.fhir_datetime)
+        self.assertIsNone(cr.dated_measure.measure)
+
+    @mock.patch('explorations.tasks.create_cohort_task.delay')
+    def test_create_with_dm_id(self, create_task_delay):
+        # As a user, I can create a CohortResult while providing a dated_measure
+        # the cohort result will be bound to it
+        test_name = "My new cohort"
+        test_description = "Cohort I just did"
+        test_fhir_group_id = "group_id"
+
+        cohort = self.factory.post(COHORTS_URL, dict(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot_id=self.user1_req1_branch2_snap3.uuid,
+            dated_measure_id=self.user1_req1_branch2_snap3_dm1.uuid,
+            fhir_group_id=test_fhir_group_id
+        ), format='json')
+        force_authenticate(cohort, self.user1)
+        response = self.create_view(cohort)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        create_task_delay.assert_not_called()
+
+        cr = CohortResult.objects.filter(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            dated_measure=self.user1_req1_branch2_snap3_dm1.uuid,
+            fhir_group_id=test_fhir_group_id
+        ).first()
+        self.assertIsNotNone(cr)
+
+    @mock.patch('explorations.tasks.create_cohort_task.delay')
+    def test_create_with_dm_id_with_fhir(self, create_task_delay):
+        # As a user, I can create a CohortResult while providing a dated_measure
+        # the cohort result will be bound to it
+        # If no group_id is provided, cohort_result and dated_measure will be updated with FHIR API
+
+        test_name = "My new cohort"
+        test_description = "Cohort I just did"
+        test_task_id = "test_id"
+
+        mocked_task_async_result = AsyncResult(id=test_task_id)
+        create_task_delay.return_value = mocked_task_async_result
 
         cohort = self.factory.post(COHORTS_URL, dict(
             name=test_name,
@@ -1029,23 +1228,27 @@ class CohortsCreateTests(CohortsTests):
         response = self.create_view(cohort)
         response.render()
 
+        create_task_delay.assert_called_once()
+
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         cr = CohortResult.objects.filter(
             name=test_name,
             description=test_description,
             request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
-            dated_measure=self.user1_req1_branch2_snap3_dm1.uuid
+            dated_measure=self.user1_req1_branch2_snap3_dm1.uuid,
+            create_task_id=test_task_id
         ).first()
         self.assertIsNotNone(cr)
 
     def test_rest_create_from_rqs(self):
-        # As a user, I can create a CohortResult, from the binded rqs' url
+        # As a user, I can create a CohortResult, from the bound rqs' url
         test_name = "My new cohort"
         test_description = "Cohort I just did"
         test_measure = 5985
         test_datetime = datetime.now().replace(tzinfo=timezone.utc)
         # Client() will use DjangoJsonEncoder for datetimes that will truncate microseconds
-        test_datetime = test_datetime.replace(microsecond=1000*(round(test_datetime.microsecond/1000)))
+        test_datetime = test_datetime.replace(microsecond=1000 * (round(test_datetime.microsecond / 1000)))
+        test_fhir_group_id = "group_id"
 
         url = reverse(
             'explorations:request-query-snapshot-cohort-results-list',
@@ -1059,7 +1262,8 @@ class CohortsCreateTests(CohortsTests):
             dated_measure=dict(
                 measure=test_measure,
                 fhir_datetime=test_datetime,
-            )
+            ),
+            fhir_group_id=test_fhir_group_id
         ), content_type='application/json')
         response.render()
 
@@ -1067,7 +1271,8 @@ class CohortsCreateTests(CohortsTests):
         cr = CohortResult.objects.filter(
             name=test_name,
             description=test_description,
-            request_query_snapshot=self.user1_req1_branch2_snap3.uuid
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            fhir_group_id=test_fhir_group_id
         ).first()
         self.assertIsNotNone(cr)
 
@@ -1105,61 +1310,41 @@ class CohortsCreateTests(CohortsTests):
         self.assertIsNotNone(cr)
 
     def test_error_create_with_forbidden_fields(self):
-        test_name = "My new cohort"
+        test_name = "My new forbidden cohort"
         test_description = "Cohort I just did"
         test_measure = 55
         test_datetime = datetime.now().replace(tzinfo=timezone.utc)
+        test_fhir_group_id = "group_id"
 
-        # As a user, I cannot create a cohort result while specifying a owner
-        request = self.factory.post(COHORTS_URL, dict(
-            name=test_name,
-            description=test_description,
-            request_query_snapshot_id=self.user1_req1_branch2_snap3.uuid,
-            dated_measure=dict(
-                measure=test_measure,
-                fhir_datetime=test_datetime,
-            ),
-            owner_id=self.user2.uuid,
-        ), format='json')
-        force_authenticate(request, self.user2)
-        response = self.create_view(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        # As a user, I cannot create a cohort result while specifying
+        forbidden_fields = dict(
+            owner_id=[self.user2.uuid],                     # a wrong owner
+            request_id=[self.user1_req2.uuid],              # a wrong request
+            type=["MY_PATIENTS"]                           # a custom type
+        )
 
-        # As a user, I cannot create a cohort result while specifying a request
-        request = self.factory.post(COHORTS_URL, dict(
-            name=test_name,
-            description=test_description,
-            request_query_snapshot_id=self.user1_req1_branch2_snap3.uuid,
-            dated_measure=dict(
-                measure=test_measure,
-                fhir_datetime=test_datetime,
-            ),
-            request_id=self.user1_req2.uuid,
-        ), format='json')
-        force_authenticate(request, self.user2)
-        response = self.create_view(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        for field, vals in forbidden_fields.items():
+            for val in vals:
+                data = dict(
+                    name=test_name,
+                    description=test_description,
+                    request_query_snapshot_id=self.user1_req1_branch2_snap3.uuid,
+                    dated_measure=dict(
+                        measure=test_measure,
+                        fhir_datetime=test_datetime,
+                    ),
+                    fhir_group_id=test_fhir_group_id,
+                )
+                data[field] = val
 
-        # As a user, I cannot create a cohort result while specifying a type
-        request = self.factory.post(COHORTS_URL, dict(
-            name=test_name,
-            description=test_description,
-            request_query_snapshot_id=self.user1_req1_branch2_snap3.uuid,
-            dated_measure=dict(
-                measure=test_measure,
-                fhir_datetime=test_datetime,
-            ),
-            type="MY_PATIENTS",
-        ), format='json')
-        force_authenticate(request, self.user2)
-        response = self.create_view(request)
-        response.render()
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+            request = self.factory.post(COHORTS_URL, data, format='json')
+            force_authenticate(request, self.user1)
+            response = self.create_view(request)
+            response.render()
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST,
+                             f"With field {field}: {val}. Content: {response.content}")
 
-        self.assertIsNone(CohortResult.objects.filter(
-            name=test_name).first())
+        self.assertIsNone(CohortResult.objects.filter(name=test_name).first())
 
     def test_error_create_with_wrong_owner(self):
         # As a user, I cannot create a cohort result on a rqs I don't own
@@ -1167,7 +1352,26 @@ class CohortsCreateTests(CohortsTests):
         test_description = "Cohort I just did"
         test_measure = 55
         test_datetime = datetime.now().replace(tzinfo=timezone.utc)
+        test_fhir_group_id = "group_id"
 
+        request = self.factory.post(COHORTS_URL, dict(
+            name=test_name,
+            description=test_description,
+            request_query_snapshot_id=self.user1_req1_branch2_snap3.uuid,
+            dated_measure=dict(
+                measure=test_measure,
+                fhir_datetime=test_datetime,
+            ),
+            fhir_group_id=test_fhir_group_id
+        ), format='json')
+        force_authenticate(request, self.user2)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertIsNone(CohortResult.objects.filter(
+            name=test_name).first())
+
+        # Even if I create through Fhir API
         request = self.factory.post(COHORTS_URL, dict(
             name=test_name,
             description=test_description,
@@ -1217,13 +1421,21 @@ class CohortsUpdateTests(CohortsTests):
         test_id = "other_id"
         test_name = "New name"
         test_description = "New description"
-        test_job_status = "finished"
+
+        # Some fields are read only
+        read_only_fields = dict(
+            create_task_id="test_task_id",
+            request_job_id="test_job_id",
+            request_job_status=FINISHED_REQUEST_STATUS,
+            request_job_fail_msg="test_fail_msg",
+            request_job_duration=1001,
+        )
 
         request = self.factory.patch(COHORTS_URL, dict(
             fhir_group_id=test_id,
             name=test_name,
             description=test_description,
-            request_job_status=test_job_status
+            **read_only_fields
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
@@ -1234,7 +1446,9 @@ class CohortsUpdateTests(CohortsTests):
         self.assertEqual(cr.fhir_group_id, test_id)
         self.assertEqual(cr.name, test_name)
         self.assertEqual(cr.description, test_description)
-        self.assertEqual(cr.request_job_status, test_job_status)
+
+        for read_only_field, val in read_only_fields.items():
+            self.assertNotEqual(getattr(cr, read_only_field, None), val, f"With field {read_only_field}: {val}")
 
     def test_error_update_cohort_as_not_owner(self):
         # As a user, I cannot update another user's cohort result
@@ -1302,3 +1516,157 @@ class CohortsUpdateTests(CohortsTests):
         self.assertEqual(cr.request_query_snapshot_id, self.user1_req1_branch2_snap2_cr1.request_query_snapshot_id)
         self.assertEqual(cr.dated_measure_id, self.user1_req1_branch2_snap2_cr1.dated_measure_id)
         self.assertEqual(cr.type, self.user1_req1_branch2_snap2_cr1.type)
+
+
+# TASKS
+class TasksTests(RqsTests):
+    def setUp(self):
+        super(TasksTests, self).setUp()
+        self.user1_req1_snap1_empty_dm = DatedMeasure(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_snap1,
+            count_task_id="task_id",
+            request_job_status=PENDING_REQUEST_STATUS
+        )
+        self.user1_req1_snap1_empty_dm.save()
+
+        self.user1_req1_snap1_empty_cohort = CohortResult(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=self.user1_req1_snap1,
+            name="My empty cohort",
+            description="so empty",
+            create_task_id="task_id",
+            request_job_status=PENDING_REQUEST_STATUS,
+            dated_measure=self.user1_req1_snap1_empty_dm
+        )
+        self.user1_req1_snap1_empty_cohort.save()
+
+    @mock.patch('explorations.tasks.fhir_api')
+    def test_get_count_task(self, mock_fhir_api):
+        test_count = 102
+        test_datetime = datetime.now().replace(tzinfo=timezone.utc)
+        test_job_id = "job_id"
+        test_job_duration = 1000
+
+        mock_fhir_api.post_count_cohort.return_value = FhirCountResponse(
+            count=test_count,
+            fhir_datetime=test_datetime,
+            fhir_job_id="job_id",
+            job_duration=test_job_duration,
+            success=True,
+        )
+        get_count_task({}, '{"json_key": "json_value"}', self.user1_req1_snap1_empty_dm.uuid)
+
+        new_dm = DatedMeasure.objects.filter(
+            uuid=self.user1_req1_snap1_empty_dm.uuid,
+            measure=test_count,
+            fhir_datetime=test_datetime,
+            request_job_duration=test_job_duration,
+            request_job_status=FINISHED_REQUEST_STATUS,
+            request_job_id=test_job_id,
+            count_task_id=self.user1_req1_snap1_empty_dm.count_task_id
+        ).first()
+        # TODO: I could not find how to test that intermediate state of request_job_status is set to 'started'
+        #  while calling Fhir API
+        self.assertIsNotNone(new_dm)
+
+    @mock.patch('explorations.tasks.fhir_api')
+    def test_failed_get_count_task(self, mock_fhir_api):
+        test_job_duration = 1000
+        test_err_msg = "Error"
+        test_fhir_job_id = "job_id"
+
+        mock_fhir_api.post_count_cohort.return_value = FhirCountResponse(
+            fhir_job_id=test_fhir_job_id,
+            job_duration=test_job_duration,
+            success=False,
+            err_msg=test_err_msg,
+        )
+
+        get_count_task({}, '{"json_key": "json_value"}', self.user1_req1_snap1_empty_dm.uuid)
+
+        new_dm = DatedMeasure.objects.filter(
+            uuid=self.user1_req1_snap1_empty_dm.uuid,
+            request_job_id=test_fhir_job_id,
+            request_job_duration=test_job_duration,
+            request_job_status=FAILED_REQUEST_STATUS,
+            request_job_fail_msg=test_err_msg,
+            count_task_id=self.user1_req1_snap1_empty_dm.count_task_id
+        ).first()
+        # TODO: I could not find how to test that intermediate state of request_job_status is set to 'started'
+        # while calling Fhir API
+        self.assertIsNotNone(new_dm)
+        self.assertIsNone(new_dm.measure)
+        self.assertIsNone(new_dm.fhir_datetime)
+
+    @mock.patch('explorations.tasks.fhir_api')
+    def test_create_cohort_task(self, mock_fhir_api):
+        test_count = 102
+        test_datetime = datetime.now().replace(tzinfo=timezone.utc)
+        test_job_id = "job_id"
+        test_job_duration = 1000
+        test_group_id = "groupId"
+
+        mock_fhir_api.post_create_cohort.return_value = FhirCohortResponse(
+            count=test_count,
+            group_id=test_group_id,
+            fhir_datetime=test_datetime,
+            fhir_job_id="job_id",
+            job_duration=test_job_duration,
+            success=True,
+        )
+        create_cohort_task({}, '{"json_key": "json_value"}', self.user1_req1_snap1_empty_cohort.uuid)
+
+        new_cr = CohortResult.objects.filter(
+            uuid=self.user1_req1_snap1_empty_cohort.uuid,
+            request_job_duration=test_job_duration,
+            request_job_status=FINISHED_REQUEST_STATUS,
+            request_job_id=test_job_id,
+            fhir_group_id=test_group_id,
+            create_task_id=self.user1_req1_snap1_empty_cohort.create_task_id
+        ).first()
+        # TODO: I could not find how to test that intermediate state of request_job_status is set to 'started'
+        #  while calling Fhir API
+        self.assertIsNotNone(new_cr)
+        self.assertEqual(new_cr.dated_measure.measure, test_count)
+        self.assertEqual(new_cr.dated_measure.count_task_id, new_cr.create_task_id)
+        self.assertEqual(new_cr.dated_measure.request_job_id, new_cr.request_job_id)
+        self.assertEqual(new_cr.dated_measure.request_job_status, new_cr.request_job_status)
+        self.assertEqual(new_cr.dated_measure.request_job_fail_msg, new_cr.request_job_fail_msg)
+        self.assertEqual(new_cr.dated_measure.request_job_duration, new_cr.request_job_duration)
+
+    @mock.patch('explorations.tasks.fhir_api')
+    def test_failed_create_cohort_task(self, mock_fhir_api):
+        test_job_duration = 1000
+        test_err_msg = "Error"
+        test_fhir_job_id = "job_id"
+
+        mock_fhir_api.post_create_cohort.return_value = FhirCohortResponse(
+            fhir_job_id=test_fhir_job_id,
+            job_duration=test_job_duration,
+            success=False,
+            err_msg=test_err_msg,
+        )
+
+        create_cohort_task({}, '{"json_key": "json_value"}', self.user1_req1_snap1_empty_cohort.uuid)
+
+        new_cr = CohortResult.objects.filter(
+            uuid=self.user1_req1_snap1_empty_cohort.uuid,
+            request_job_id=test_fhir_job_id,
+            request_job_duration=test_job_duration,
+            request_job_status=FAILED_REQUEST_STATUS,
+            request_job_fail_msg=test_err_msg,
+            create_task_id=self.user1_req1_snap1_empty_cohort.create_task_id
+        ).first()
+        # TODO: I could not find how to test that intermediate state of request_job_status is set to 'started'
+        # while calling Fhir API
+        self.assertIsNotNone(new_cr)
+        self.assertIsNone(new_cr.dated_measure.measure)
+        self.assertIsNone(new_cr.dated_measure.fhir_datetime)
+        self.assertEqual(new_cr.fhir_group_id, "")
+        self.assertEqual(new_cr.dated_measure.request_job_id, new_cr.request_job_id)
+        self.assertEqual(new_cr.dated_measure.request_job_status, new_cr.request_job_status)
+        self.assertEqual(new_cr.dated_measure.request_job_fail_msg, new_cr.request_job_fail_msg)
+        self.assertEqual(new_cr.dated_measure.request_job_duration, new_cr.request_job_duration)

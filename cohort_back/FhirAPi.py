@@ -1,42 +1,22 @@
-import requests
+class FhirValidateResponse:
+    def __init__(self, success: bool = False, err_msg: str = ""):
+        self.success = success
+        self.err_msg = err_msg
 
 
-class FhirQueryResponse():
-    def __init__(self, resp: requests.Response):
-        result = resp.json()
-        self.size: str = result["count"]
-        self.job_id: str = result["job_id"]
-        return
+class FhirCountResponse(FhirValidateResponse):
+    def __init__(self, count: int = None, fhir_datetime=None, fhir_job_id: str = "", job_duration=None,
+                 success: bool = False, err_msg: str = ""):
+        super(FhirCountResponse, self).__init__(success=success, err_msg=err_msg)
+        self.count = count
+        self.fhir_datetime = fhir_datetime
+        self.job_duration = job_duration
+        self.fhir_job_id = fhir_job_id
 
 
-class FhirStatusResponse():
-    def __init__(self, resp: requests.Response):
-        result = resp.json()
-        self.status: str = result["status"]
-        return
-
-
-class FhirCohortResponse():
-    def __init__(self, resp: requests.Response):
-        result = resp.json()
-        self.group_id: str = result["group_id"]
-        return
-
-
-def send_cohort_count_query(json: str) -> FhirQueryResponse:
-    return
-
-
-def send_cohort_query(json: str) -> FhirQueryResponse:
-    return
-
-
-def check_cohort_status(job_id: str) -> FhirStatusResponse:
-    return
-
-
-def retrieve_cohort_result(cohort_id) -> FhirCohortResponse:
-    return
-
-
-
+class FhirCohortResponse(FhirCountResponse):
+    def __init__(self, count: int = None, group_id: str = "", fhir_datetime=None, fhir_job_id: str = "",
+                 job_duration=None, success: bool = False, err_msg: str = ""):
+        super(FhirCohortResponse, self).__init__(count=count, fhir_datetime=fhir_datetime, fhir_job_id=fhir_job_id,
+                                                 job_duration=job_duration, success=success, err_msg=err_msg)
+        self.group_id = group_id
