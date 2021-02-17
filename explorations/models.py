@@ -1,4 +1,4 @@
-from __future__ import annotations
+# from __future__ import annotations
 import json
 from datetime import date
 from django.apps import apps
@@ -99,7 +99,8 @@ class RequestQuerySnapshot(BaseModel):
         self.saved = True
         self.save()
 
-    def create_empty_dated_measure(self) -> DatedMeasure:
+    # def create_empty_dated_measure(self) -> DatedMeasure:
+    def create_empty_dated_measure(self):
         dm = DatedMeasure(
             request_query_snapshot=self,
             request=self.request,
@@ -108,7 +109,8 @@ class RequestQuerySnapshot(BaseModel):
         dm.save()
         return dm
 
-    def generate_measure(self, auth_headers) -> DatedMeasure:
+    # def generate_measure(self, auth_headers) -> DatedMeasure:
+    def generate_measure(self, auth_headers):
         dm = self.create_empty_dated_measure()
 
         # import explorations.tasks as tasks
