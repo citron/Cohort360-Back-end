@@ -1091,6 +1091,7 @@ class CohortsCreateTests(CohortsTests):
     def test_create(self, create_task_delay):
         # As a user, I can create a CohortResult
         # Some fields are read only
+        # Some fields are optional
         test_name = "My new cohort"
         test_description = "Cohort I just did"
         test_measure = 55
@@ -1104,6 +1105,8 @@ class CohortsCreateTests(CohortsTests):
             request_job_fail_msg="test_fail_msg",
             request_job_duration=1001,
         )
+
+        optional_fields = ["name", "description"]
 
         cohort = self.factory.post(COHORTS_URL, dict(
             name=test_name,
@@ -1139,6 +1142,40 @@ class CohortsCreateTests(CohortsTests):
 
         for read_only_field, val in read_only_fields.items():
             self.assertNotEqual(getattr(dm, read_only_field, None), val, f"With field {read_only_field}: {val}")
+
+    @mock.patch('explorations.tasks.create_cohort_task.delay')
+    def test_create_minimal(self, create_task_delay):
+        # As a user, I can create a CohortResult with the minimum of fields
+        test_measure = 654
+        test_datetime = datetime.now().replace(tzinfo=timezone.utc)
+        test_fhir_group_id = "group_id"
+
+        cohort = self.factory.post(COHORTS_URL, dict(
+            request_query_snapshot_id=self.user1_req1_branch2_snap3.uuid,
+            dated_measure=dict(
+                measure=test_measure,
+                fhir_datetime=test_datetime,
+            ),
+            fhir_group_id=test_fhir_group_id,
+        ), format='json')
+        force_authenticate(cohort, self.user1)
+        response = self.create_view(cohort)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        create_task_delay.assert_not_called()
+
+        cr = CohortResult.objects.filter(
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+            fhir_group_id=test_fhir_group_id
+        ).first()
+        self.assertIsNotNone(cr)
+
+        dm = DatedMeasure.objects.filter(
+            measure=test_measure,
+            fhir_datetime=test_datetime,
+        ).first()
+        self.assertIsNotNone(dm)
 
     @mock.patch('explorations.tasks.create_cohort_task.delay')
     def test_create_with_fhir(self, create_task_delay):

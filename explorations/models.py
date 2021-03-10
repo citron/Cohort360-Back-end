@@ -167,6 +167,11 @@ class DatedMeasure(BaseModel):
 
     fhir_datetime = models.DateTimeField(null=True, blank=False)
     measure = models.BigIntegerField(null=True, blank=False)  # Size of potential cohort as returned by SolR
+    measure_male = models.BigIntegerField(null=True, blank=True)
+    measure_unknown = models.BigIntegerField(null=True, blank=True)
+    measure_deceased = models.BigIntegerField(null=True, blank=True)
+    measure_alive = models.BigIntegerField(null=True, blank=True)
+    measure_female = models.BigIntegerField(null=True, blank=True)
 
     count_task_id = models.TextField(blank=True)
     request_job_id = models.TextField(blank=True)
@@ -179,8 +184,8 @@ class DatedMeasure(BaseModel):
 class CohortResult(BaseModel):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_cohorts')
 
-    name = models.CharField(max_length=50)
-    description = models.TextField(blank=True)
+    name = models.CharField(max_length=50, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
     favorite = models.BooleanField(default=False)
 
     request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE)

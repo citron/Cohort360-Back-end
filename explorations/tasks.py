@@ -95,6 +95,11 @@ def get_count_task(auth_headers: dict, json_file: str, dm_uuid: str):
     if resp.success:
         dm.fhir_datetime = resp.fhir_datetime
         dm.measure = resp.count
+        dm.measure_male = resp.count_male
+        dm.measure_unknown = resp.count_unknown
+        dm.measure_deceased = resp.count_deceased
+        dm.measure_alive = resp.count_alive
+        dm.measure_female = resp.count_female
         dm.request_job_status = FINISHED_REQUEST_STATUS
         dm.request_job_duration = resp.job_duration
         dm.request_job_id = resp.fhir_job_id
