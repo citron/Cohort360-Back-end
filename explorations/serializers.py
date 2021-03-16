@@ -5,7 +5,7 @@ from rest_framework import serializers
 from cohort.models import User
 from cohort.serializers import BaseSerializer, UserSerializer
 import cohort_back.settings as fhir_api
-from cohort_back.settings import get_fhir_authorization_header, format_json_request
+from cohort_back.settings import get_fhir_authorization_header, format_json_request, retrieve_perimeters
 from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure
 
 
@@ -61,7 +61,7 @@ class RequestQuerySnapshotSerializer(BaseSerializer):
     class Meta:
         model = RequestQuerySnapshot
         exclude = ["request", "owner"]
-        read_only_fields = ["is_active_branch"]
+        read_only_fields = ["is_active_branch", "care_sites_ids"]
 
     def create(self, validated_data):
         previous_snapshot = validated_data.get("previous_snapshot", None)
@@ -87,20 +87,22 @@ class RequestQuerySnapshotSerializer(BaseSerializer):
         serialized_query = validated_data.get("serialized_query", None)
         if serialized_query is None:
             raise serializers.ValidationError("You have to provide a serialized_query")
-        else:
-            try:
-                json.loads(serialized_query)
-            except Exception as e:
-                raise serializers.ValidationError(f"Serialized_query could not be recognized as json: {e}")
 
-            # post_validate_cohort is called this way so that fhir_api can be mocked in tests
-            validate_resp = fhir_api.post_validate_cohort(
-                format_json_request(serialized_query),
-                get_fhir_authorization_header(self.context.get("request"))
-            )
-            if not validate_resp.success:
-                raise serializers.ValidationError(f"Serialized_query, after formatting, "
-                                                  f"is not accepted by FHIR server: {validate_resp.err_msg}")
+        try:
+            json.loads(serialized_query)
+        except json.JSONDecodeError as e:
+            raise serializers.ValidationError(f"Serialized_query could not be recognized as json: {e.msg}")
+
+        # post_validate_cohort is called this way so that fhir_api can be mocked in tests
+        validate_resp = fhir_api.post_validate_cohort(
+            format_json_request(serialized_query),
+            get_fhir_authorization_header(self.context.get("request"))
+        )
+        if not validate_resp.success:
+            raise serializers.ValidationError(f"Serialized_query, after formatting, "
+                                              f"is not accepted by FHIR server: {validate_resp.err_msg}")
+
+        validated_data["perimeters_ids"] = retrieve_perimeters(serialized_query)
 
         return super(RequestQuerySnapshotSerializer, self).create(validated_data=validated_data)
 

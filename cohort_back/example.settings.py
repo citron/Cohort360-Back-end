@@ -246,6 +246,11 @@ def format_json_request(json_req: str) -> str:
     raise NotImplementedError()
 
 
+# called to retrieve care_site_ids (perimeters) from a Json request
+def retrieve_perimeters(json_req: str) -> [str]:
+    return None
+
+
 # called when a request is about to be made to external Fhir API
 def get_fhir_authorization_header(request: Request) -> dict:
     raise NotImplementedError()

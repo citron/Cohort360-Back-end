@@ -1,6 +1,8 @@
 import json
+from itertools import groupby
 
 from django.test import TestCase, Client
+from rest_framework import status
 from rest_framework.test import APIRequestFactory
 
 from cohort.models import User
@@ -38,6 +40,61 @@ class BaseTests(TestCase):
     def get_response_payload(self, response):
         response.render()
         return json.loads(response.content)
+
+    # will process a get request via the list_view given a url,
+    # and check the results providing previous results if provided
+    def check_list_query(self, next_url, obj_to_find, user, page_size, previously_found_obj=[]) -> [ObjectView]:
+        self.client.force_login(user)
+        response = self.client.get(next_url)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        return self.check_paged_response(response, obj_to_find, user=user, previously_found_obj=previously_found_obj,
+                                  page_size=page_size)
+
+    # check that the list of objects in the response results is the same as the one required (by checking ids)
+    # in case the result is paginated, it will also get next page and concatenate the results before checking
+    # the global result
+    def check_paged_response(self, response, obj_to_find,
+                             user, previously_found_obj: [str] = [], page_size: int=None) -> [ObjectView]:
+        resp = self.get_response_payload(response)
+
+        obj_found = [ObjectView(res) for res in resp["results"]]
+        obj_found_ids = [str(obj.uuid) for obj in obj_found]
+
+        obj_to_find = obj_to_find if isinstance(obj_to_find, list) else [obj_to_find]
+        obj_to_find_ids = [str(obj.uuid) for obj in obj_to_find]
+
+        if page_size is not None:
+            # we check that all the results from the current page are in the 'to_find' list
+            msg = "\n".join(["", "got", str(obj_found_ids), "should be included in", str(obj_to_find_ids)])
+            [self.assertIn(i, obj_to_find_ids, msg=msg) for i in obj_found_ids]
+
+            total_obj_found = previously_found_obj + obj_found
+            if resp["next"]:
+                # we check that the size is indeed of the page size and get next url that will also check response,
+                # adding the current result
+                self.assertEqual(len(obj_found_ids), page_size, msg=msg)
+                return self.check_list_query(resp["next"], obj_to_find, user=user, page_size=page_size,
+                                             previously_found_obj=total_obj_found)
+            else:
+                # we check that the total size, given all the pages, is the same than required and that
+                # all required were found
+                total_obj_found_ids = [str(obj.uuid) for obj in total_obj_found]
+                [self.assertIn(i, total_obj_found_ids, msg=msg) for i in obj_to_find_ids]
+                return total_obj_found
+
+        else:
+            # we check the equality of the obj_to_find and teh obj_found
+            msg = "\n".join(["", "got", str(obj_found_ids), "should be", str(obj_to_find_ids)])
+            [self.assertIn(i, obj_found_ids, msg=msg) for i in obj_to_find_ids]
+            [self.assertIn(i, obj_to_find_ids, msg=msg) for i in obj_found_ids]
+            return obj_found
+
+    def check_list_sorted(self, list_obj_found: [ObjectView], list_to_find: [], get_attr_lambda, reverse: bool = False):
+        list_to_find.sort(key=get_attr_lambda, reverse=reverse)
+        grouped_to_find = [x for x, _ in groupby(map(get_attr_lambda, list_to_find))]
+        grouped_found = [x for x, _ in groupby(map(get_attr_lambda, list_obj_found))]
+        [self.assertEqual(grouped_to_find[i], grouped_found[i]) for i in range(len(grouped_found))]
 
     def check_get_response(self, response, obj_to_find):
         obj_found = [ObjectView(res) for res in self.get_response_payload(response)["results"]] if \

@@ -2,6 +2,7 @@
 import json
 from datetime import date
 from django.apps import apps
+from django.contrib.postgres.fields import ArrayField
 
 from cohort.models import User
 from django.db import models
@@ -70,6 +71,7 @@ class RequestQuerySnapshot(BaseModel):
                                           on_delete=models.SET_NULL, null=True)
     is_active_branch = models.BooleanField(default=True)
     saved = models.BooleanField(default=False)
+    perimeters_ids = ArrayField(models.CharField(max_length=15), null=True, blank=True)
 
     @property
     def active_next_snapshot(self):

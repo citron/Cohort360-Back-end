@@ -1,3 +1,8 @@
+from itertools import groupby
+
+import math
+import random
+import string
 from datetime import timedelta
 from unittest import mock
 
@@ -11,7 +16,7 @@ from rest_framework.test import force_authenticate
 from cohort_back.FhirAPi import FhirValidateResponse, FhirCountResponse, FhirCohortResponse
 from cohort_back.tests import BaseTests
 from explorations.models import Request, RequestQuerySnapshot, DatedMeasure, CohortResult, PENDING_REQUEST_STATUS, \
-    FINISHED_REQUEST_STATUS, FAILED_REQUEST_STATUS
+    FINISHED_REQUEST_STATUS, FAILED_REQUEST_STATUS, REQUEST_STATUS_CHOICES, COHORT_TYPE_CHOICES
 from explorations.tasks import get_count_task, create_cohort_task
 from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet, DatedMeasureViewSet, CohortResultViewSet
 
@@ -1084,6 +1089,245 @@ class CohortsGetTests(CohortsTests):
         rqs_to_find = [self.user1_req1_branch2_snap3_cr1, self.user1_req1_branch2_snap3_cr2,
                        self.user1_req1_branch2_snap2_cr1]
         self.check_get_response(response, rqs_to_find)
+
+
+def random_str(length):
+    letters = string.ascii_lowercase + ' '
+    return ''.join(random.choice(letters) for i in range(length))
+
+
+class CohortsGetFilteredListTests(RequestsTests):
+    # TODO: test these
+    fields = (
+        "name",
+        "min_result_size",
+        "max_result_size",
+        "request_job_status",
+        "perimeter_id",
+        "min_fhir_datetime",
+        "max_fhir_datetime",
+        "favorite",
+        "type"
+    )
+
+    def setUp(self):
+        super(CohortsGetFilteredListTests, self).setUp()
+        self.name_pattern = "pat"
+        self.min_result_size = 100
+        self.max_result_size = 1000
+        self.min_created_at = datetime.now(tz=timezone.utc) + timedelta(days=-30)
+        self.max_created_at = datetime.now(tz=timezone.utc)
+
+        nb_cohorts = 200
+
+        self.perimeters_ids = ["0", "1", "2", "13"]
+        self.snapshots = RequestQuerySnapshot.objects.bulk_create(RequestQuerySnapshot(
+            owner=self.user1,
+            request=self.user1_req1,
+            perimeters_ids=random.choices(self.perimeters_ids, k=random.randint(0, len(self.perimeters_ids)))
+        ) for i in range(nb_cohorts))
+
+        self.cohort_names = [
+            random_str(random.randint(6, 15)) for i in range(nb_cohorts - 20)
+        ] + [
+            random_str(random.randint(1, 6)) + self.name_pattern + random_str(random.randint(2, 6)) for i in range(20)
+        ]
+        self.cohort_sizes = [random.randint(self.min_result_size, self.max_result_size) for i in range(nb_cohorts)]
+        self.cohort_created_ats = [self.min_created_at + timedelta(days=random.randint(0, 30))
+                                   for i in range(nb_cohorts)]
+
+        self.user1_req1_branch2_snap3_dms = DatedMeasure.objects.bulk_create(DatedMeasure(
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=rqs,
+            measure=s,
+            fhir_datetime=d,
+        ) for (s, d, rqs) in zip(
+            self.cohort_sizes,
+            self.cohort_created_ats,
+            self.snapshots
+        ))
+
+        self.user1_req1_branch2_snap3_crs = CohortResult.objects.bulk_create(CohortResult(
+            name=n,
+            owner=self.user1,
+            request=self.user1_req1,
+            request_query_snapshot=rqs,
+            fhir_group_id="group11231",
+            dated_measure=dm,
+            created_at=d,
+            request_job_status=random.choice(REQUEST_STATUS_CHOICES)[0],
+            type=random.choice(COHORT_TYPE_CHOICES)[0],
+            favorite=random.choice([False, True])
+        ) for (n, dm, d, rqs) in zip(
+            self.cohort_names,
+            self.user1_req1_branch2_snap3_dms,
+            self.cohort_created_ats,
+            self.snapshots
+        ))
+
+    def test_rest_get_filtered_list_from_request(self):
+        # As a user, I can get the list of cohorts from the Request they are bound to
+        base_url = reverse(
+            'explorations:request-cohort-results-list',
+            kwargs=dict(parent_lookup_request=self.user1_req1.uuid)
+        )[:-1]
+
+        param_sets = [
+            dict(
+                query_params={
+                    "perimeters_ids": [self.perimeters_ids[1], self.perimeters_ids[2]],
+                },
+                filter=lambda cr: self.perimeters_ids[1] in cr.request_query_snapshot.perimeters_ids
+                                  and self.perimeters_ids[2] in cr.request_query_snapshot.perimeters_ids
+            ),
+            dict(
+                query_params={
+                    "perimeter_id": self.perimeters_ids[1],
+                },
+                filter=lambda cr: self.perimeters_ids[1] in cr.request_query_snapshot.perimeters_ids
+            ),
+            dict(
+                query_params={
+                    "type": COHORT_TYPE_CHOICES[0][0],
+                },
+                filter=lambda cr: cr.type == COHORT_TYPE_CHOICES[0][0]
+            ),
+            dict(
+                query_params={
+                    "request_job_status": REQUEST_STATUS_CHOICES[0][0],
+                },
+                filter=lambda cr: cr.request_job_status == REQUEST_STATUS_CHOICES[0][0]
+            ),
+            dict(
+                query_params={
+                    "favorite": True,
+                },
+                filter=lambda cr: cr.favorite
+            ),
+            dict(
+                query_params=dict(
+                    name=self.name_pattern
+                ),
+                filter_params=dict(
+                    name__icontains=self.name_pattern
+                ),
+                filter=lambda cr: cr.name.find(self.name_pattern) > -1
+            ),
+            dict(
+                query_params=dict(
+                    min_result_size=self.min_result_size + math.floor(
+                        (self.max_result_size - self.min_result_size) / 3),
+                    max_result_size=self.min_result_size + math.floor(
+                        (self.max_result_size - self.min_result_size) * 2 / 3)
+                ),
+                filter=lambda cr: cr.dated_measure.measure >= self.min_result_size + math.floor(
+                    (self.max_result_size - self.min_result_size) / 3) and
+                                  cr.dated_measure.measure <= self.min_result_size + math.floor(
+                    (self.max_result_size - self.min_result_size) * 2 / 3),
+                # filter_params=dict(
+                #     dated_measure__measure__gte=self.min_result_size + math.floor(
+                #         (self.max_result_size - self.min_result_size) / 3),
+                #     dated_measure__measure__lte=self.min_result_size + math.floor(
+                #         (self.max_result_size - self.min_result_size) * 2 / 3)
+                # )
+            ),
+            dict(
+                query_params=dict(
+                    min_fhir_datetime=(self.min_created_at + timedelta(days=10)).date().isoformat(),
+                    max_fhir_datetime=(self.min_created_at + timedelta(days=20)).date().isoformat()
+                ),
+                filter=lambda cr: (self.min_created_at + timedelta(days=10)).replace(hour=0, minute=0, second=0, microsecond=0) <= cr.dated_measure.fhir_datetime
+                                  <= (self.min_created_at + timedelta(days=20)).replace(hour=0, minute=0, second=0, microsecond=0)
+                # dict(
+                #     created_at__gte=,
+                #     created_at__lte=self.min_created_at + timedelta(days=20),
+                # )
+            )
+        ]
+        self.client.force_login(self.user1)
+
+        for param_set in param_sets:
+            # url = f"{base_url}/?{'&'.join(map(lambda k_v: f'{k_v[0]}={k_v[1]}' if not isinstance(k_v[1], list) else '&'.join([f'{k_v[0]}={i}' for i in k_v[1]]), param_set['query_params'].items()))}"
+            url = f"{base_url}/?{'&'.join(map(lambda k_v: f'{k_v[0]}={k_v[1]}' if not isinstance(k_v[1], list) else k_v[0]+'='+','.join(k_v[1]), param_set['query_params'].items()))}"
+
+            response = self.client.get(url)
+            response.render()
+
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+            rqs_to_find = list(filter(param_set["filter"], self.user1_req1_branch2_snap3_crs))
+            self.check_paged_response(response, rqs_to_find, user=self.user1, page_size=100)
+            # self.check_get_response(response, rqs_to_find)
+
+    def test_rest_get_ordered_list_from_request(self):
+        # As a user, I can get the list of cohorts from the Request they are bound to
+        base_url = reverse(
+            'explorations:request-cohort-results-list',
+            kwargs=dict(parent_lookup_request=self.user1_req1.uuid)
+        )[:-1]
+
+        param_sets = [
+            dict(
+                query_params={
+                    "ordering": "name"
+                },
+                key=lambda cr: getattr(cr, "name").replace(" ", ""),
+            ),
+            dict(
+                query_params={
+                    "ordering": "request_job_status"
+                },
+                key=lambda cr: getattr(cr, "request_job_status"),
+            ),
+            dict(
+                query_params={
+                    "ordering": "favorite"
+                },
+                key=lambda cr: getattr(cr, "favorite"),
+            ),
+            dict(
+                query_params={
+                    "ordering": "type"
+                },
+                key=lambda cr: getattr(cr, "type"),
+            ),
+            # dict(
+            #     query_params={
+            #         "ordering": "result_size"
+            #     },
+            #     key=lambda cr: getattr(cr, "result_size"),
+            # ),
+            # dict(
+            #     query_params={
+            #         "ordering": "fhir_datetime"
+            #     },
+            #     key=lambda cr: getattr(cr, "fhir_datetime"),
+            # ),
+        ]
+
+        self.client.force_login(self.user1)
+
+        #TODO
+        # sort on result_size and fhir_datetime don't work
+        for param_set in param_sets:
+            url = f"{base_url}/?{'&'.join(map(lambda k_v: f'{k_v[0]}={k_v[1]}', param_set['query_params'].items()))}"
+            response = self.client.get(url)
+            response.render()
+
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+            to_find = list(self.user1_req1_branch2_snap3_crs)
+            found = self.check_paged_response(response, to_find, user=self.user1, page_size=100)
+            self.check_list_sorted(list_obj_found=found, list_to_find=to_find, get_attr_lambda=param_set["key"])
+
+            url = f"{base_url}/?{'&'.join(map(lambda k_v: f'{k_v[0]}=-{k_v[1]}', param_set['query_params'].items()))}"
+            response = self.client.get(url)
+            response.render()
+
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+            to_find = list(self.user1_req1_branch2_snap3_crs)
+            found = self.check_paged_response(response, to_find, user=self.user1, page_size=100)
+            self.check_list_sorted(list_obj_found=found, list_to_find=to_find, get_attr_lambda=param_set["key"],
+                                   reverse=True)
 
 
 class CohortsCreateTests(CohortsTests):
