@@ -1097,19 +1097,6 @@ def random_str(length):
 
 
 class CohortsGetFilteredListTests(RequestsTests):
-    # TODO: test these
-    fields = (
-        "name",
-        "min_result_size",
-        "max_result_size",
-        "request_job_status",
-        "perimeter_id",
-        "min_fhir_datetime",
-        "max_fhir_datetime",
-        "favorite",
-        "type"
-    )
-
     def setUp(self):
         super(CohortsGetFilteredListTests, self).setUp()
         self.name_pattern = "pat"
@@ -1269,15 +1256,29 @@ class CohortsGetFilteredListTests(RequestsTests):
         param_sets = [
             dict(
                 query_params={
-                    "ordering": "name"
-                },
-                key=lambda cr: getattr(cr, "name").replace(" ", ""),
-            ),
-            dict(
-                query_params={
                     "ordering": "request_job_status"
                 },
                 key=lambda cr: getattr(cr, "request_job_status"),
+            ),
+            dict(
+                query_params={
+                    "ordering": "result_size"
+                },
+                key=lambda cr: getattr(cr, "result_size"),
+            ),
+            dict(
+                query_params={
+                    "ordering": "fhir_datetime"
+                },
+                key=lambda cr: cr.dated_measure["fhir_datetime"].rstrip("Z")  # case is object found, via ObjectView
+                if isinstance(cr.dated_measure, dict)
+                else cr.dated_measure.fhir_datetime.isoformat().split("+")[0]  # case is object to_find, actual model
+            ),
+            dict(
+                query_params={
+                    "ordering": "name"
+                },
+                key=lambda cr: getattr(cr, "name").replace(" ", ""),
             ),
             dict(
                 query_params={
@@ -1291,24 +1292,10 @@ class CohortsGetFilteredListTests(RequestsTests):
                 },
                 key=lambda cr: getattr(cr, "type"),
             ),
-            # dict(
-            #     query_params={
-            #         "ordering": "result_size"
-            #     },
-            #     key=lambda cr: getattr(cr, "result_size"),
-            # ),
-            # dict(
-            #     query_params={
-            #         "ordering": "fhir_datetime"
-            #     },
-            #     key=lambda cr: getattr(cr, "fhir_datetime"),
-            # ),
         ]
 
         self.client.force_login(self.user1)
 
-        #TODO
-        # sort on result_size and fhir_datetime don't work
         for param_set in param_sets:
             url = f"{base_url}/?{'&'.join(map(lambda k_v: f'{k_v[0]}={k_v[1]}', param_set['query_params'].items()))}"
             response = self.client.get(url)
