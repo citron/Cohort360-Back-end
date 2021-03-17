@@ -41,6 +41,8 @@ class CohortFilter(django_filters.FilterSet):
     # ?min_created_at=2015-04-23
     min_fhir_datetime = django_filters.DateTimeFilter(field_name='dated_measure__fhir_datetime', lookup_expr="gte")
     max_fhir_datetime = django_filters.DateTimeFilter(field_name='dated_measure__fhir_datetime', lookup_expr="lte")
+    request_job_status = django_filters.AllValuesMultipleFilter()
+    type = django_filters.AllValuesMultipleFilter()
 
     class Meta:
         model = CohortResult

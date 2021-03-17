@@ -1163,6 +1163,12 @@ class CohortsGetFilteredListTests(RequestsTests):
         param_sets = [
             dict(
                 query_params={
+                    "request_job_status": f"{REQUEST_STATUS_CHOICES[0][0]}&request_job_status={REQUEST_STATUS_CHOICES[1][0]}"
+                },
+                filter=lambda cr: cr.request_job_status in [REQUEST_STATUS_CHOICES[0][0], REQUEST_STATUS_CHOICES[1][0]]
+            ),
+            dict(
+                query_params={
                     "perimeters_ids": [self.perimeters_ids[1], self.perimeters_ids[2]],
                 },
                 filter=lambda cr: self.perimeters_ids[1] in cr.request_query_snapshot.perimeters_ids
