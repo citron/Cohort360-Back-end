@@ -16,11 +16,13 @@ from rest_framework.test import force_authenticate
 from cohort_back.FhirAPi import FhirValidateResponse, FhirCountResponse, FhirCohortResponse
 from cohort_back.tests import BaseTests
 from explorations.models import Request, RequestQuerySnapshot, DatedMeasure, CohortResult, PENDING_REQUEST_STATUS, \
-    FINISHED_REQUEST_STATUS, FAILED_REQUEST_STATUS, REQUEST_STATUS_CHOICES, COHORT_TYPE_CHOICES
+    FINISHED_REQUEST_STATUS, FAILED_REQUEST_STATUS, REQUEST_STATUS_CHOICES, COHORT_TYPE_CHOICES, Folder
 from explorations.tasks import get_count_task, create_cohort_task
-from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet, DatedMeasureViewSet, CohortResultViewSet
+from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet, DatedMeasureViewSet, CohortResultViewSet, \
+    FolderViewSet
 
 EXPLORATIONS_URL = "/explorations"
+FOLDERS_URL = f"{EXPLORATIONS_URL}/folders"
 REQUESTS_URL = f"{EXPLORATIONS_URL}/requests"
 RQS_URL = f"{EXPLORATIONS_URL}/request-query-snapshots"
 DATED_MEASURES_URL = f"{EXPLORATIONS_URL}/dated-measures"
@@ -31,14 +33,174 @@ COHORTS_URL = f"{EXPLORATIONS_URL}/cohorts"
 # TODO : make test for create/get Request's Rqs, Rqs' dated_measure, Rqs' cohortresult
 # TODO : prevent add rqs with previous not on active branch
 
+# FOLDERS
+class FoldersTests(BaseTests):
+    def setUp(self):
+        super(FoldersTests, self).setUp()
+        self.user1_fold1 = Folder(
+            owner=self.user1,
+            name="Folder 1"
+        )
+        self.user1_fold1.save()
+
+        self.user2_fold1 = Folder(
+            owner=self.user2,
+            name="Folder 1"
+        )
+        self.user2_fold1.save()
+
+        self.retrieve_view = FolderViewSet.as_view({'get': 'retrieve'})
+        self.list_view = FolderViewSet.as_view({'get': 'list'})
+        self.create_view = FolderViewSet.as_view({'post': 'create'})
+        self.delete_view = FolderViewSet.as_view({'delete': 'destroy'})
+        self.update_view = FolderViewSet.as_view({'patch': 'partial_update'})
+
+
+class FoldersGetTests(FoldersTests):
+    def setUp(self):
+        super(FoldersGetTests, self).setUp()
+
+    def test_user_simple_get(self):
+        # As a user, I can get a folder I did
+        request = self.factory.get(f'{FOLDERS_URL}')
+        force_authenticate(request, self.user1)
+        response = self.retrieve_view(request, uuid=self.user1_fold1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        req_to_find = self.user1_fold1
+        self.check_get_response(response, req_to_find)
+
+    def test_user_simple_list(self):
+        # As a user, I can get a folder I did
+        request = self.factory.get(f'{FOLDERS_URL}')
+        force_authenticate(request, self.user1)
+        response = self.list_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        req_to_find = [self.user1_fold1]
+        self.check_get_response(response, req_to_find)
+
+    def test_error_simple_get_not_owned(self):
+        # As a user, I can't get a folder user 2 created
+        request = self.factory.get(f'{FOLDERS_URL}')
+        force_authenticate(request, self.user2)
+        response = self.retrieve_view(request, uuid=self.user1_fold1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.content)
+
+
+class FoldersCreateTests(FoldersTests):
+    def test_create_simple(self):
+        # As a user, I can create a folder
+        request = self.factory.post(FOLDERS_URL, dict(
+            name="Folder 3"
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        req = Folder.objects.filter(
+            name="Folder 3",
+            owner_id=self.user1.uuid).first()
+        self.assertIsNotNone(req)
+
+    def test_error_create_simple_with_other_owner(self):
+        # As a user, I can create a folder
+        request = self.factory.post(FOLDERS_URL, dict(
+            name="Folder 3",
+            owner_id=self.user2.uuid
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.create_view(request)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        req = Folder.objects.filter(
+            name="Folder 3").first()
+        self.assertIsNone(req)
+
+
+class FoldersDeleteTests(FoldersTests):
+    def setUp(self):
+        self.view = FolderViewSet.as_view({'delete': 'destroy'})
+        return super(FoldersDeleteTests, self).setUp()
+
+    def test_delete_as_owner(self):
+        # As a user, I can delete a folder I created
+        request = self.factory.delete(FOLDERS_URL)
+        force_authenticate(request, self.user1)
+        response = self.delete_view(request, uuid=self.user1_fold1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.content)
+        req = Folder.objects.filter(
+            uuid=self.user1_fold1.uuid
+        ).first()
+        self.assertIsNone(req)
+
+    def test_error_delete_as_not_owner(self):
+        # As a user, I cannot delete another user's request
+        request = self.factory.delete(FOLDERS_URL)
+        force_authenticate(request, self.user2)
+        response = self.delete_view(request, uuid=self.user1_fold1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.content)
+        self.assertIsNotNone(Folder.objects.filter(
+            uuid=self.user1_fold1.uuid
+        ).first())
+
+
+class FoldersUpdateTests(FoldersTests):
+    def test_update_as_owner(self):
+        # As a user, I can update a folder I created
+        test_name = "New name"
+        request = self.factory.patch(REQUESTS_URL, dict(
+            name=test_name
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_fold1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        req = Folder.objects.get(uuid=self.user1_fold1.uuid)
+        self.assertEqual(req.name, test_name)
+
+    def test_error_update_as_not_owner(self):
+        # As a user, I cannot update another user's request
+        request = self.factory.patch(REQUESTS_URL, dict(
+            name="New name"
+        ), format='json')
+        force_authenticate(request, self.user2)
+        response = self.update_view(request, uuid=self.user1_fold1.uuid)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.content)
+        req = Folder.objects.get(uuid=self.user1_fold1.uuid)
+        self.assertEqual(req.name, self.user1_fold1.name)
+
+    def test_error_update_forbidden_fields(self):
+        # As a user, I cannot update some fields in a folder I created
+        request = self.factory.patch(REQUESTS_URL, dict(
+            owner_id=self.user2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_fold1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        req = Folder.objects.get(uuid=self.user1_fold1.uuid)
+        self.assertEqual(req.owner_id, self.user1_fold1.owner_id)
+
+
 # REQUESTS
-class RequestsTests(BaseTests):
+class RequestsTests(FoldersTests):
     def setUp(self):
         super(RequestsTests, self).setUp()
         self.user1_req1 = Request(
             owner=self.user1,
             name="Request 1",
             description=" Request 1 from user 1",
+            parent_folder=self.user1_fold1
         )
         self.user1_req1.save()
 
@@ -46,6 +208,7 @@ class RequestsTests(BaseTests):
             owner=self.user2,
             name="Request 1",
             description=" Request 1 from user 2",
+            parent_folder=self.user2_fold1
         )
         self.user2_req1.save()
 
@@ -58,7 +221,6 @@ class RequestsTests(BaseTests):
 class RequestsGetTests(RequestsTests):
     def setUp(self):
         super(RequestsGetTests, self).setUp()
-        self.retrieve_view
 
     def test_user_simple_get(self):
         # As a user, I can get a request I did
@@ -78,6 +240,20 @@ class RequestsGetTests(RequestsTests):
         response.render()
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.content)
 
+    def test_rest_get_list_from_folder(self):
+        # As a user, I can get the list of RQS from the Request they are bound to
+        url = reverse(
+            'explorations:folder-requests-list',
+            kwargs=dict(parent_lookup_parent_folder=self.user1_fold1.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.get(url)
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        req_to_find = [self.user1_req1]
+        self.check_get_response(response, req_to_find)
+
 
 class RequestsCreateTests(RequestsTests):
     def test_create_simple_request(self):
@@ -85,6 +261,7 @@ class RequestsCreateTests(RequestsTests):
         request = self.factory.post(REQUESTS_URL, dict(
             name="Request 3",
             description="Request number 3",
+            parent_folder=self.user1_fold1.uuid
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.create_view(request)
@@ -93,6 +270,27 @@ class RequestsCreateTests(RequestsTests):
         req = Request.objects.filter(
             name="Request 3",
             description="Request number 3",
+            parent_folder=self.user1_fold1,
+            owner_id=self.user1.uuid).first()
+        self.assertIsNotNone(req)
+
+    def test_rest_create_simple_request(self):
+        # As a user, I can create a request using folder url
+        url = reverse(
+            'explorations:folder-requests-list',
+            kwargs=dict(parent_lookup_parent_folder=self.user1_fold1.uuid)
+        )
+        self.client.force_login(self.user1)
+        response = self.client.post(url, data=dict(
+            name="Request 3",
+            description="Request number 3"
+        ))
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        req = Request.objects.filter(
+            name="Request 3",
+            description="Request number 3",
+            parent_folder=self.user1_fold1,
             owner_id=self.user1.uuid).first()
         self.assertIsNotNone(req)
 
@@ -101,6 +299,7 @@ class RequestsCreateTests(RequestsTests):
         request = self.factory.post(REQUESTS_URL, dict(
             name="Request 3",
             description="Request number 3",
+            parent_folder=self.user1_fold1.uuid,
             owner_id=self.user2.uuid
         ), format='json')
         force_authenticate(request, self.user1)
@@ -109,6 +308,7 @@ class RequestsCreateTests(RequestsTests):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
         req = Request.objects.filter(
             name="Request 3",
+            parent_folder=self.user1_fold1,
             description="Request number 3").first()
         self.assertIsNone(req)
 
@@ -147,9 +347,16 @@ class RequestsDeleteTests(RequestsTests):
 class RequestsUpdateTests(RequestsTests):
     def test_update_request_as_owner(self):
         # As a user, I can update a request I created
+        self.user1_fold2 = Folder(
+            owner=self.user1,
+            name="Folder 2"
+        )
+        self.user1_fold2.save()
+
         request = self.factory.patch(REQUESTS_URL, dict(
             name="New name",
             description="New description",
+            parent_folder_id=self.user1_fold2.uuid
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.update_view(request, uuid=self.user1_req1.uuid)
@@ -159,6 +366,7 @@ class RequestsUpdateTests(RequestsTests):
         req = Request.objects.get(uuid=self.user1_req1.uuid)
         self.assertEqual(req.name, "New name")
         self.assertEqual(req.description, "New description")
+        self.assertEqual(req.parent_folder.uuid, self.user1_fold2.uuid)
 
     def test_error_update_request_as_not_owner(self):
         # As a user, I cannot update another user's request
@@ -203,6 +411,7 @@ class RqsTests(RequestsTests):
             owner=self.user1,
             name="Request 2",
             description=" Request 2 from user 1",
+            parent_folder=self.user1_fold1
         )
         self.user1_req2.save()
 

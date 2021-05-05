@@ -6,7 +6,7 @@ from cohort.models import User
 from cohort.serializers import BaseSerializer, UserSerializer
 import cohort_back.settings as fhir_api
 from cohort_back.settings import get_fhir_authorization_header, format_json_request, retrieve_perimeters
-from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure
+from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure, Folder
 
 
 class PrimaryKeyRelatedFieldWithOwner(serializers.PrimaryKeyRelatedField):
@@ -31,8 +31,31 @@ class UserPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
         return qs.filter(uuid=user.uuid)
 
 
+class FolderSerializer(BaseSerializer):
+    parent_folder_id = PrimaryKeyRelatedFieldWithOwner(source='parent_folder', queryset=Folder.objects.all(), required=False)
+    owner_id = UserPrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
+
+    class Meta:
+        model = Folder
+        # fields = "__all__"
+        exclude = ["owner"]
+
+    def update(self, instance, validated_data):
+        for f in ['owner']:
+            if f in validated_data:
+                raise serializers.ValidationError(f'{f} field cannot bu updated manually')
+        return super(FolderSerializer, self).update(instance, validated_data)
+
+    def partial_update(self, instance, validated_data):
+        for f in ['owner']:
+            if f in validated_data:
+                raise serializers.ValidationError(f'{f} field cannot bu updated manually')
+        return super(FolderSerializer, self).partial_update(instance, validated_data)
+
+
 class RequestSerializer(BaseSerializer):
     owner_id = UserPrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
+    parent_folder_id = PrimaryKeyRelatedFieldWithOwner(source='parent_folder', queryset=Folder.objects.all(), required=False)
 
     class Meta:
         model = Request

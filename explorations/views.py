@@ -21,9 +21,9 @@ from rest_framework_extensions.mixins import NestedViewSetMixin
 from cohort.permissions import IsAdminOrOwner, OR, IsAdmin
 from cohort.views import UserObjectsRestrictedViewSet
 from cohort_back.views import NoDeleteViewSetMixin, NoUpdateViewSetMixin
-from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure
+from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure, Folder
 from explorations.serializers import RequestSerializer, CohortResultSerializer, \
-    RequestQuerySnapshotSerializer, DatedMeasureSerializer
+    RequestQuerySnapshotSerializer, DatedMeasureSerializer, FolderSerializer
 
 
 class CohortFilter(django_filters.FilterSet):
@@ -270,6 +270,9 @@ class RequestViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
         else:
             request.data['owner_id'] = str(user.uuid)
 
+        if 'parent_lookup_parent_folder' in kwargs:
+            request.data["parent_folder"] = kwargs['parent_lookup_parent_folder']
+
         return super(RequestViewSet, self).create(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'], permission_classes=(IsAdminOrOwner,), url_path="get-status")
@@ -282,6 +285,36 @@ class RequestViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
         r = cr.check_request_status()
         return Response({'response': "Query successful!", 'data': r},
                         status=status.HTTP_200_OK)
+
+
+class FolderViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
+    queryset = Folder.objects.all()
+    serializer_class = FolderSerializer
+    http_method_names = ['get', 'post', 'patch', 'delete']
+    lookup_field = "uuid"
+
+    filterset_fields = ('uuid', 'name',)
+    ordering_fields = ('created_at', 'modified_at',
+                       'name')
+    ordering = ('name',)
+    search_fields = ('$name', '$description',)
+
+    def get_permissions(self):
+        if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
+            return OR(IsAdminOrOwner())
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        if type(request.data) == QueryDict:
+            request.data._mutable = True
+
+        if 'owner_id' in request.data:
+            if request.data['owner_id'] != str(user.uuid):
+                return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            request.data['owner_id'] = str(user.uuid)
+
+        return super(FolderViewSet, self).create(request, *args, **kwargs)
 
 
 class SearchCriteria(APIView):

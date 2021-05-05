@@ -18,7 +18,8 @@ from django.urls import include, path
 from rest_framework import routers
 from rest_framework_extensions.routers import NestedRouterMixin
 
-from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet, CohortResultViewSet, DatedMeasureViewSet
+from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet, CohortResultViewSet, DatedMeasureViewSet, \
+    FolderViewSet
 
 
 class NestedDefaultRouter(NestedRouterMixin, routers.DefaultRouter):
@@ -27,6 +28,14 @@ class NestedDefaultRouter(NestedRouterMixin, routers.DefaultRouter):
 
 router = NestedDefaultRouter()
 
+folder_router = router.register(r'folders', FolderViewSet, basename="folders")
+folder_req_router = folder_router.register(
+    'requests',
+    RequestViewSet,
+    basename="folder-requests",
+    parents_query_lookups=["parent_folder"]
+)
+
 req_router = router.register(r'requests', RequestViewSet, basename="requests")
 req_rqs_router = req_router.register(
     'query-snapshots',
@@ -34,11 +43,24 @@ req_rqs_router = req_router.register(
     basename="request-request-query-snapshots",
     parents_query_lookups=["request"]
 )
+folder_req_rqs_router = folder_req_router.register(
+    'query-snapshots',
+    RequestQuerySnapshotViewSet,
+    basename="folder-request-request-query-snapshots",
+    parents_query_lookups=["parent_folder", "request"]
+)
+
 req_router.register(
     'dated-measures',
     DatedMeasureViewSet,
     basename="request-dated-measures",
     parents_query_lookups=["request"]
+)
+folder_req_router.register(
+    'dated-measures',
+    DatedMeasureViewSet,
+    basename="folder-request-dated-measures",
+    parents_query_lookups=["parent_folder", "request"]
 )
 req_router.register(
     "cohorts",
@@ -46,7 +68,12 @@ req_router.register(
     basename="request-cohort-results",
     parents_query_lookups=["request"]
 )
-
+folder_req_router.register(
+    "cohorts",
+    CohortResultViewSet,
+    basename="folder-request-cohort-results",
+    parents_query_lookups=["parent_folder", "request"]
+)
 
 rqs_router = router.register(r'request-query-snapshots', RequestQuerySnapshotViewSet)
 rqs_router.register(

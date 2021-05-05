@@ -43,12 +43,21 @@ REQUEST_DATA_TYPE_CHOICES = [
 PATIENT_REQUEST_TYPE = REQUEST_DATA_TYPE_CHOICES[0][0]
 
 
+class Folder(BaseModel):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='folders')
+    name = models.CharField(max_length=50)
+    parent_folder = models.ForeignKey("explorations.Folder", on_delete=models.CASCADE, related_name="children_children",
+                                      null=True)
+
+
 class Request(BaseModel):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_requests')
 
     name = models.CharField(max_length=50)
     description = models.TextField(blank=True)
     favorite = models.BooleanField(default=False)
+
+    parent_folder = models.ForeignKey(Folder, on_delete=models.CASCADE, related_name="requests", null=False)
 
     data_type_of_query = models.CharField(max_length=9, choices=REQUEST_DATA_TYPE_CHOICES, default=PATIENT_REQUEST_TYPE)
 
