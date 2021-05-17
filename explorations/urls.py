@@ -80,7 +80,7 @@ rqs_router.register(
     'next-snapshots',
     RequestQuerySnapshotViewSet,
     basename="request-query-snapshot-next-snapshots",
-    parents_query_lookups=["previous_snapshot_id"]
+    parents_query_lookups=["previous_snapshot"]
 )
 rqs_router.register(
     'dated-measures',

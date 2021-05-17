@@ -46,7 +46,7 @@ PATIENT_REQUEST_TYPE = REQUEST_DATA_TYPE_CHOICES[0][0]
 class Folder(BaseModel):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='folders')
     name = models.CharField(max_length=50)
-    parent_folder = models.ForeignKey("explorations.Folder", on_delete=models.CASCADE, related_name="children_children",
+    parent_folder = models.ForeignKey("explorations.Folder", on_delete=models.CASCADE, related_name="children_folders",
                                       null=True)
 
 
@@ -173,7 +173,8 @@ class DatedMeasure(BaseModel):
     possibly generating a Cohort/Group in Fhir.
     """
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_request_query_results')
-    request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE)
+    request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE,
+                                               related_name='dated_measures')
     request = models.ForeignKey(Request, on_delete=models.CASCADE)
 
     fhir_datetime = models.DateTimeField(null=True, blank=False)
@@ -199,7 +200,8 @@ class CohortResult(BaseModel):
     description = models.TextField(blank=True, null=True)
     favorite = models.BooleanField(default=False)
 
-    request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE)
+    request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE,
+                                               related_name='cohort_results')
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='request_cohorts')
 
     fhir_group_id = models.CharField(max_length=64, blank=True)

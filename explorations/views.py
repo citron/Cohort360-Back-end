@@ -4,17 +4,12 @@ from collections import OrderedDict
 import coreapi
 import coreschema
 import django_filters
-from rest_framework.filters import OrderingFilter as RestOrderingFilter
 from django.http import QueryDict
-from django.utils.itercompat import is_iterable
-from django_filters import BaseCSVFilter, ChoiceFilter, OrderingFilter
 from rest_framework.decorators import action
 from rest_framework import status
-from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.schemas import AutoSchema
-from rest_framework.settings import api_settings
 from rest_framework.views import APIView
 from rest_framework_extensions.mixins import NestedViewSetMixin
 
@@ -23,7 +18,7 @@ from cohort.views import UserObjectsRestrictedViewSet
 from cohort_back.views import NoDeleteViewSetMixin, NoUpdateViewSetMixin
 from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure, Folder
 from explorations.serializers import RequestSerializer, CohortResultSerializer, \
-    RequestQuerySnapshotSerializer, DatedMeasureSerializer, FolderSerializer
+    RequestQuerySnapshotSerializer, DatedMeasureSerializer, FolderSerializer, CohortResultSerializerFullDatedMeasure
 
 
 class CohortFilter(django_filters.FilterSet):
@@ -83,6 +78,15 @@ class CohortResultViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
         if self.request.method in ['GET', 'POST', 'PATCH', 'DELETE']:
             return OR(IsAdminOrOwner())
 
+    def get_serializer_class(self):
+        if self.request.method in ["POST", "PUT", "PATCH"] \
+                and "dated_measure" in self.request.data \
+                and isinstance(self.request.data["dated_measure"], dict):
+            return CohortResultSerializerFullDatedMeasure
+        if self.request.method == "GET":
+            return CohortResultSerializerFullDatedMeasure
+        return super(CohortResultViewSet, self).get_serializer_class()
+
     def create(self, request, *args, **kwargs):
         user = request.user
 
@@ -90,25 +94,28 @@ class CohortResultViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
             request.data._mutable = True
 
         if 'parent_lookup_request_query_snapshot' in kwargs:
-            request.data["request_query_snapshot_id"] = kwargs['parent_lookup_request_query_snapshot']
+            request.data["request_query_snapshot"] = kwargs['parent_lookup_request_query_snapshot']
 
         if 'parent_lookup_request' in kwargs:
-            request.data["request_id"] = kwargs['parent_lookup_request']
+            request.data["request"] = kwargs['parent_lookup_request']
 
-        if 'owner_id' in request.data:
-            if request.data['owner_id'] != str(user.uuid):
-                return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            request.data['owner_id'] = str(user.uuid)
+        # # temp fix untill _id is not used
+        # if 'request_query_snapshot_id' in request.data:
+        #     request.data['request_query_snapshot'] = request.data['request_query_snapshot_id']
+        # if 'dated_measure_id' in request.data:
+        #     request.data['dated_measure'] = request.data['dated_measure_id']
 
         if 'dated_measure_id' not in request.data:
             if 'dated_measure' in request.data:
                 dated_measure = request.data['dated_measure']
-                if not isinstance(dated_measure, dict):
-                    return Response({"message": "dated_measure should be an object"}, status=status.HTTP_400_BAD_REQUEST)
-                if "request_query_snapshot_id" in request.data:
-                    dated_measure["request_query_snapshot_id"] = request.data["request_query_snapshot_id"]
-                dated_measure["owner_id"] = str(user.uuid)
+                # if not isinstance(dated_measure, dict):
+                #     return Response({"message": "dated_measure should be an object"}, status=status.HTTP_400_BAD_REQUEST)
+                if isinstance(dated_measure, dict):
+                    if "request_query_snapshot" in request.data:
+                        dated_measure["request_query_snapshot"] = request.data["request_query_snapshot"]
+                    dated_measure["owner"] = str(user.uuid)
+        else:
+            request.data['dated_measure'] = request.data['dated_measure_id']
 
         return super(CohortResultViewSet, self).create(request, *args, **kwargs)
 
@@ -125,6 +132,13 @@ class CohortResultViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
             instance._prefetched_objects_cache = {}
 
         return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        # # temp fix untill _id is not used
+        # if 'request_query_snapshot_id' in request.data:
+        #     request.data['request_query_snapshot'] = request.data['request_query_snapshot_id']
+
+        return super(CohortResultViewSet, self).partial_update(request, *args, **kwargs)
 
     def list(self, request, *args, **kwargs):
         return super(CohortResultViewSet, self).list(request, *args, **kwargs)
@@ -159,16 +173,14 @@ class DatedMeasureViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
         if type(request.data) == QueryDict:
             request.data._mutable = True
 
-        if 'owner_id' in request.data:
-            if request.data['owner_id'] != str(user.uuid):
-                return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            request.data['owner_id'] = str(user.uuid)
+        # temp fix untill _id is not used
+        # if 'request_query_snapshot_id' in request.data:
+        #     request.data['request_query_snapshot'] = request.data['request_query_snapshot_id']
 
         if 'parent_lookup_request_query_snapshot' in kwargs:
-            request.data["request_query_snapshot_id"] = kwargs['parent_lookup_request_query_snapshot']
+            request.data["request_query_snapshot"] = kwargs['parent_lookup_request_query_snapshot']
         if 'parent_lookup_request' in kwargs:
-            request.data["request_id"] = kwargs['parent_lookup_request']
+            request.data["request"] = kwargs['parent_lookup_request']
 
         return super(DatedMeasureViewSet, self).create(request, *args, **kwargs)
 
@@ -197,13 +209,18 @@ class RequestQuerySnapshotViewSet(NestedViewSetMixin, NoDeleteViewSetMixin,
         if 'owner_id' in request.data:
             if request.data['owner_id'] != str(user.uuid):
                 return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            request.data['owner_id'] = str(user.uuid)
+        request.data['owner'] = str(user.uuid)
+
+        # temp fix untill _id is not used
+        # if 'request_id' in request.data:
+        #     request.data['request'] = request.data["request_id"]
+        # if 'previous_snapshot_id' in request.data:
+        #     request.data['previous_snapshot'] = request.data['previous_snapshot_id']
 
         if 'parent_lookup_request' in kwargs:
-            request.data["request_id"] = kwargs['parent_lookup_request']
-        if 'parent_lookup_previous_snapshot_id' in kwargs:
-            request.data["previous_snapshot_id"] = kwargs['parent_lookup_previous_snapshot_id']
+            request.data["request"] = kwargs['parent_lookup_request']
+        if 'parent_lookup_previous_snapshot' in kwargs:
+            request.data["previous_snapshot"] = kwargs['parent_lookup_previous_snapshot']
 
         return super(RequestQuerySnapshotViewSet, self).create(request, *args, **kwargs)
 
@@ -264,11 +281,14 @@ class RequestViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
         if type(request.data) == QueryDict:
             request.data._mutable = True
 
+        # temp fix untill _id is not used
+        # if 'parent_folder_id' in request.data:
+        #     request.data['parent_folder'] = request.data["parent_folder_id"]
+
         if 'owner_id' in request.data:
             if request.data['owner_id'] != str(user.uuid):
                 return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            request.data['owner_id'] = str(user.uuid)
+        request.data['owner'] = str(user.uuid)
 
         if 'parent_lookup_parent_folder' in kwargs:
             request.data["parent_folder"] = kwargs['parent_lookup_parent_folder']
@@ -285,6 +305,13 @@ class RequestViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
         r = cr.check_request_status()
         return Response({'response': "Query successful!", 'data': r},
                         status=status.HTTP_200_OK)
+
+    def partial_update(self, request, *args, **kwargs):
+        # temp fix untill _id is not used
+        # if 'parent_folder_id' in request.data:
+        #     request.data['parent_folder'] = request.data["parent_folder_id"]
+
+        return super(RequestViewSet, self).partial_update(request, *args, **kwargs)
 
 
 class FolderViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
@@ -311,10 +338,18 @@ class FolderViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
         if 'owner_id' in request.data:
             if request.data['owner_id'] != str(user.uuid):
                 return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            request.data['owner_id'] = str(user.uuid)
+        request.data['owner_id'] = str(user.uuid)
 
         return super(FolderViewSet, self).create(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        # temp fix untill _id is not used
+        # if 'parent_folder_id' in request.data:
+        #     request.data['parent_folder'] = request.data["parent_folder_id"]
+        # if 'owner_id' in request.data:
+        #     return Response({"message": "Cannot specify a different owner"}, status=status.HTTP_400_BAD_REQUEST)
+
+        return super(FolderViewSet, self).partial_update(request, *args, **kwargs)
 
 
 class SearchCriteria(APIView):

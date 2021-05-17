@@ -393,6 +393,14 @@ class RequestsUpdateTests(RequestsTests):
         response.render()
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
 
+        request = self.factory.patch(REQUESTS_URL, dict(
+            owner=self.user2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
         req = Request.objects.get(uuid=self.user1_req1.uuid)
         self.assertEqual(req.owner_id, self.user1_req1.owner_id)
 
@@ -587,9 +595,9 @@ class RqsCreateTests(RqsTests):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         rqs = RequestQuerySnapshot.objects.filter(
             serialized_query=test_sq,
-            owner_id=self.user1.uuid,
-            request_id=self.user1_req2.uuid,
-            previous_snapshot_id=None
+            owner=self.user1.uuid,
+            request=self.user1_req2.uuid,
+            previous_snapshot=None
         ).first()
         self.assertIsNotNone(rqs)
         mock_fhir_api.post_validate_cohort.assert_called_once()
@@ -601,7 +609,7 @@ class RqsCreateTests(RqsTests):
         test_sq = '{"test": "success"}'
         url = reverse(
             'explorations:request-query-snapshot-next-snapshots-list',
-            kwargs=dict(parent_lookup_previous_snapshot_id=self.user1_req1_branch2_snap3.uuid)
+            kwargs=dict(parent_lookup_previous_snapshot=self.user1_req1_branch2_snap3.uuid)
         )
         self.client.force_login(self.user1)
         response = self.client.post(url, data=dict(
@@ -1118,6 +1126,32 @@ class DatedMeasuresUpdateTests(DatedMeasuresTests):
         # As a user, I cannot update rqs in a dated_measure I own
         request = self.factory.patch(DATED_MEASURES_URL, dict(
             request_query_snapshot_id=self.user1_req1_branch2_snap2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        request = self.factory.patch(DATED_MEASURES_URL, dict(
+            owner=self.user2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot update request in a dated_measure I own
+        request = self.factory.patch(DATED_MEASURES_URL, dict(
+            request=self.user1_req2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        # As a user, I cannot update rqs in a dated_measure I own
+        request = self.factory.patch(DATED_MEASURES_URL, dict(
+            request_query_snapshot=self.user1_req1_branch2_snap2.uuid,
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.update_view(request, uuid=self.user1_req1_branch2_snap3_dm1.uuid)
@@ -1669,7 +1703,7 @@ class CohortsCreateTests(CohortsTests):
             name=test_name,
             description=test_description,
             request_query_snapshot_id=self.user1_req1_branch2_snap3.uuid,
-            dated_measure_id=self.user1_req1_branch2_snap3_dm1.uuid,
+            dated_measure=self.user1_req1_branch2_snap3_dm1.uuid,
             fhir_group_id=test_fhir_group_id
         ), format='json')
         force_authenticate(cohort, self.user1)
@@ -1957,9 +1991,25 @@ class CohortsUpdateTests(CohortsTests):
         response.render()
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
 
+        request = self.factory.patch(COHORTS_URL, dict(
+            owner=self.user2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
         # As a user, I cannot update request in a cohort result I created
         request = self.factory.patch(COHORTS_URL, dict(
             request_id=self.user1_req2.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        request = self.factory.patch(COHORTS_URL, dict(
+            request=self.user1_req2.uuid,
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
@@ -1975,9 +2025,25 @@ class CohortsUpdateTests(CohortsTests):
         response.render()
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
 
+        request = self.factory.patch(COHORTS_URL, dict(
+            request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
         # As a user, I cannot update dated_measure in a cohort result I created
         request = self.factory.patch(COHORTS_URL, dict(
             dated_measure_id=self.user1_req1_branch2_snap3_dm1.uuid,
+        ), format='json')
+        force_authenticate(request, self.user1)
+        response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
+        response.render()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+
+        request = self.factory.patch(COHORTS_URL, dict(
+            dated_measure=self.user1_req1_branch2_snap3_dm1.uuid,
         ), format='json')
         force_authenticate(request, self.user1)
         response = self.update_view(request, uuid=self.user1_req1_branch2_snap2_cr1.uuid)
