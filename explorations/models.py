@@ -205,7 +205,7 @@ class CohortResult(BaseModel):
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='request_cohorts')
 
     fhir_group_id = models.CharField(max_length=64, blank=True)
-    dated_measure = models.ForeignKey(DatedMeasure, related_name="cohort", on_delete=models.PROTECT)
+    dated_measure = models.ForeignKey(DatedMeasure, related_name="cohort", on_delete=models.CASCADE)
 
     create_task_id = models.TextField(blank=True)
     request_job_id = models.TextField(blank=True)

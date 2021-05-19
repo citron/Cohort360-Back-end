@@ -10,6 +10,8 @@ pyjwt==1.7.1
 drf-extensions==0.6.0
 django-extensions==3.0.9
 
+django-safedelete==1.0.0
+
 Celery==4.4.*
 redis==3.3.*
 

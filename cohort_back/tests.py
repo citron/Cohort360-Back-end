@@ -1,9 +1,7 @@
 import json
 from datetime import timedelta
 
-from django.db.models import QuerySet
 from django.utils import timezone
-from django.utils.datetime_safe import datetime
 from itertools import groupby
 
 from django.test import TestCase, Client
@@ -193,14 +191,14 @@ class SoftDeleteTests(BaseTests):
             request=self.user1_folder1_req1,
             request_query_snapshot=self.user1_folder1_req1_snap1,
             measure=0,
-            fhir_datetime=datetime.now()
+            fhir_datetime=timezone.now()
         )
         self.user1_folder1_req1_snap1_dm2 = DatedMeasure.objects.create(
             owner=self.user1,
             request=self.user1_folder1_req1,
             request_query_snapshot=self.user1_folder1_req1_snap1,
             measure=0,
-            fhir_datetime=datetime.now()
+            fhir_datetime=timezone.now()
         )
         self.user1_folder1_req1_snap1_dm2_cohort = CohortResult.objects.create(
             owner=self.user1,
@@ -218,45 +216,45 @@ class SoftDeleteTests(BaseTests):
     def is_soft_deleted(self, instance):
         try:
             self.assertIsNotNone(instance)
-            self.assertIsNotNone(instance.deleted_at)
-            self.assertAlmostEqual(instance.deleted_at, timezone.now(), delta=timedelta(seconds=1))
+            self.assertIsNotNone(instance.deleted)
+            self.assertAlmostEqual(instance.deleted, timezone.now(), delta=timedelta(seconds=1))
         except AssertionError as e:
             self.verificationErrors.append(str(e))
 
     def is_not_deleted(self, instance):
         try:
             self.assertIsNotNone(instance)
-            self.assertIsNone(instance.deleted_at)
+            self.assertIsNone(instance.deleted)
         except AssertionError as e:
             self.verificationErrors.append(str(e))
 
     def test_delete_user(self):
         self.user1.delete()
         soft_deleted_list = [
-            User.objects.filter(username=self.user1.username).first(),
-            Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
-            Folder.objects.filter(uuid=self.user1_folder2.uuid).first(),
-            Request.objects.filter(uuid=self.user1_folder1_req2.uuid).first(),
-            Request.objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
-            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
-            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
-            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
-            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
-            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+            User.all_objects.filter(username=self.user1.username).first(),
+            Folder.all_objects.filter(uuid=self.user1_folder1.uuid).first(),
+            Folder.all_objects.filter(uuid=self.user1_folder2.uuid).first(),
+            Request.all_objects.filter(uuid=self.user1_folder1_req2.uuid).first(),
+            Request.all_objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
+            RequestQuerySnapshot.all_objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
+            RequestQuerySnapshot.all_objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
+            DatedMeasure.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
+            DatedMeasure.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+            CohortResult.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
         ]
         [self.is_soft_deleted(i) for i in soft_deleted_list]
 
     def test_delete_folder(self):
         self.user1_folder1.delete()
         [self.is_soft_deleted(i) for i in [
-            Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
-            Request.objects.filter(uuid=self.user1_folder1_req2.uuid).first(),
-            Request.objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
-            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
-            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
-            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
-            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
-            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+            Folder.all_objects.filter(uuid=self.user1_folder1.uuid).first(),
+            Request.all_objects.filter(uuid=self.user1_folder1_req2.uuid).first(),
+            Request.all_objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
+            RequestQuerySnapshot.all_objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
+            RequestQuerySnapshot.all_objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
+            DatedMeasure.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
+            DatedMeasure.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+            CohortResult.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
         ]]
         [self.is_not_deleted(i) for i in [
             Folder.objects.filter(uuid=self.user1_folder2.uuid).first(),
@@ -265,12 +263,12 @@ class SoftDeleteTests(BaseTests):
     def test_delete_request(self):
         self.user1_folder1_req1.delete()
         [self.is_soft_deleted(i) for i in [
-            Request.objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
-            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
-            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
-            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
-            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
-            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+            Request.all_objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
+            RequestQuerySnapshot.all_objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
+            RequestQuerySnapshot.all_objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
+            DatedMeasure.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
+            DatedMeasure.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+            CohortResult.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
         ]]
         [self.is_not_deleted(i) for i in [
             Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
@@ -280,10 +278,10 @@ class SoftDeleteTests(BaseTests):
     def test_delete_rqs(self):
         self.user1_folder1_req1_snap1.delete()
         [self.is_soft_deleted(i) for i in [
-            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
-            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
-            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
-            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+            RequestQuerySnapshot.all_objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
+            DatedMeasure.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
+            DatedMeasure.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+            CohortResult.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
         ]]
         [self.is_not_deleted(i) for i in [
             Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
@@ -297,8 +295,8 @@ class SoftDeleteTests(BaseTests):
     def test_delete_dm(self):
         self.user1_folder1_req1_snap1_dm2.delete()
         [self.is_soft_deleted(i) for i in [
-            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
-            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+            DatedMeasure.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+            CohortResult.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
         ]]
         [self.is_not_deleted(i) for i in [
             Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
@@ -312,7 +310,7 @@ class SoftDeleteTests(BaseTests):
     def test_delete_cohort(self):
         self.user1_folder1_req1_snap1_dm2_cohort.delete()
         [self.is_soft_deleted(i) for i in [
-            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+            CohortResult.all_objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
         ]]
         [self.is_not_deleted(i) for i in [
             Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
