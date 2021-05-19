@@ -1,4 +1,9 @@
 import json
+from datetime import timedelta
+
+from django.db.models import QuerySet
+from django.utils import timezone
+from django.utils.datetime_safe import datetime
 from itertools import groupby
 
 from django.test import TestCase, Client
@@ -8,6 +13,7 @@ from rest_framework.test import APIRequestFactory
 from cohort.models import User
 from cohort_back.models import BaseModel
 from cohort_back.celery import app as celery_app
+from explorations.models import Folder, Request, RequestQuerySnapshot, CohortResult, DatedMeasure
 
 
 class ObjectView(object):
@@ -145,3 +151,175 @@ class BaseTests(TestCase):
     #         if dupp_field in request_model:
     #             manual_field = f"manual_{dupp_field}"
     #             self.assertEqual(getattr(base_instance, manual_field), request_model[dupp_field])
+
+
+class SoftDeleteTests(BaseTests):
+    def setUp(self):
+        super(SoftDeleteTests, self).setUp()
+        self.user1_folder1 = Folder.objects.create(
+            owner=self.user1,
+            name="Folder1",
+        )
+        self.user1_folder2 = Folder.objects.create(
+            owner=self.user1,
+            name="Folder2",
+        )
+
+        self.user1_folder1_req1 = Request.objects.create(
+            owner=self.user1,
+            name="Req1",
+            parent_folder=self.user1_folder1,
+        )
+        self.user1_folder1_req2 = Request.objects.create(
+            owner=self.user1,
+            name="Req2",
+            parent_folder=self.user1_folder1,
+        )
+
+        self.user1_folder1_req1_snap1 = RequestQuerySnapshot.objects.create(
+            owner=self.user1,
+            serialized_query="{}",
+            request=self.user1_folder1_req1,
+        )
+        self.user1_folder1_req1_snap2 = RequestQuerySnapshot.objects.create(
+            owner=self.user1,
+            serialized_query="{}",
+            request=self.user1_folder1_req1,
+            previous_snapshot=self.user1_folder1_req1_snap1
+        )
+
+        self.user1_folder1_req1_snap1_dm1 = DatedMeasure.objects.create(
+            owner=self.user1,
+            request=self.user1_folder1_req1,
+            request_query_snapshot=self.user1_folder1_req1_snap1,
+            measure=0,
+            fhir_datetime=datetime.now()
+        )
+        self.user1_folder1_req1_snap1_dm2 = DatedMeasure.objects.create(
+            owner=self.user1,
+            request=self.user1_folder1_req1,
+            request_query_snapshot=self.user1_folder1_req1_snap1,
+            measure=0,
+            fhir_datetime=datetime.now()
+        )
+        self.user1_folder1_req1_snap1_dm2_cohort = CohortResult.objects.create(
+            owner=self.user1,
+            name="Cohort",
+            request=self.user1_folder1_req1,
+            request_query_snapshot=self.user1_folder1_req1_snap1,
+            dated_measure=self.user1_folder1_req1_snap1_dm2,
+            fhir_group_id="lol"
+        )
+        self.verificationErrors = []
+
+    def tearDown(self):
+        self.assertEqual([], self.verificationErrors)
+
+    def is_soft_deleted(self, instance):
+        try:
+            self.assertIsNotNone(instance)
+            self.assertIsNotNone(instance.deleted_at)
+            self.assertAlmostEqual(instance.deleted_at, timezone.now(), delta=timedelta(seconds=1))
+        except AssertionError as e:
+            self.verificationErrors.append(str(e))
+
+    def is_not_deleted(self, instance):
+        try:
+            self.assertIsNotNone(instance)
+            self.assertIsNone(instance.deleted_at)
+        except AssertionError as e:
+            self.verificationErrors.append(str(e))
+
+    def test_delete_user(self):
+        self.user1.delete()
+        soft_deleted_list = [
+            User.objects.filter(username=self.user1.username).first(),
+            Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
+            Folder.objects.filter(uuid=self.user1_folder2.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req2.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+        ]
+        [self.is_soft_deleted(i) for i in soft_deleted_list]
+
+    def test_delete_folder(self):
+        self.user1_folder1.delete()
+        [self.is_soft_deleted(i) for i in [
+            Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req2.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+        ]]
+        [self.is_not_deleted(i) for i in [
+            Folder.objects.filter(uuid=self.user1_folder2.uuid).first(),
+        ]]
+
+    def test_delete_request(self):
+        self.user1_folder1_req1.delete()
+        [self.is_soft_deleted(i) for i in [
+            Request.objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+        ]]
+        [self.is_not_deleted(i) for i in [
+            Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req2.uuid).first(),
+        ]]
+
+    def test_delete_rqs(self):
+        self.user1_folder1_req1_snap1.delete()
+        [self.is_soft_deleted(i) for i in [
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+        ]]
+        [self.is_not_deleted(i) for i in [
+            Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req2.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
+        ]]
+        snap2 = RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first()
+        self.assertIsNotNone(snap2)
+        self.assertIsNone(snap2.previous_snapshot)
+
+    def test_delete_dm(self):
+        self.user1_folder1_req1_snap1_dm2.delete()
+        [self.is_soft_deleted(i) for i in [
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+        ]]
+        [self.is_not_deleted(i) for i in [
+            Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req2.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
+        ]]
+
+    def test_delete_cohort(self):
+        self.user1_folder1_req1_snap1_dm2_cohort.delete()
+        [self.is_soft_deleted(i) for i in [
+            CohortResult.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2_cohort.uuid).first(),
+        ]]
+        [self.is_not_deleted(i) for i in [
+            Folder.objects.filter(uuid=self.user1_folder1.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req2.uuid).first(),
+            Request.objects.filter(uuid=self.user1_folder1_req1.uuid).first(),
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap2.uuid).first(),
+            RequestQuerySnapshot.objects.filter(uuid=self.user1_folder1_req1_snap1.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm1.uuid).first(),
+            DatedMeasure.objects.filter(uuid=self.user1_folder1_req1_snap1_dm2.uuid).first(),
+        ]]

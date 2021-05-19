@@ -2219,3 +2219,4 @@ class TasksTests(RqsTests):
         self.assertEqual(new_cr.dated_measure.request_job_status, new_cr.request_job_status)
         self.assertEqual(new_cr.dated_measure.request_job_fail_msg, new_cr.request_job_fail_msg)
         self.assertEqual(new_cr.dated_measure.request_job_duration, new_cr.request_job_duration)
+
