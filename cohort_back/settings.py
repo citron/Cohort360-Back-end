@@ -9,34 +9,39 @@ https://docs.djangoproject.com/en/2.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/2.1/ref/settings/
 """
-
 import os
+import environ
 
-from rest_framework.request import Request
-
-from cohort_back.FhirAPi import FhirCountResponse, FhirCohortResponse, FhirValidateResponse
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env = environ.Env()
+environ.Env.read_env()
+
+SERVER_VERSION = env("SERVER_VERSION")
+BACK_URL = env("BACK_URL")
+FRONT_URL = env("FRONT_URL")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+SECRET_KEY = env("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = int(env("DEBUG")) == 1
+print(f"DEBUG: {DEBUG}")
+
 
 CORS_ORIGIN_ALLOW_ALL = DEBUG
 CORS_ORIGIN_WHITELIST = [
-    "https://cohort360.com",
-    "https://cohort360-back.com"
+    FRONT_URL,
+    "http://localhost:49033",
+    BACK_URL,
 ]
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'cohort360-back.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', BACK_URL]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
 
 # Application definition
 
@@ -47,11 +52,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_extensions',
 
     'django_filters',
+    'safedelete',
 
     'rest_framework',
     'rest_framework_swagger',
+    'drf_yasg',
 
     'corsheaders',
 
@@ -102,10 +110,15 @@ WSGI_APPLICATION = 'cohort_back.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': env("DB_NAME"),
+        'USER': env("DB_USER"),
+        'PASSWORD': env("DB_PASSWORD"),
+        'HOST': env("DB_HOST"),
+        'PORT': env("DB_PORT"),
     }
 }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/2.1/ref/settings/#auth-password-validators
@@ -125,7 +138,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/2.1/topics/i18n/
 
@@ -139,12 +151,13 @@ USE_L10N = True
 
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/2.1/howto/static-files/
 
 STATIC_URL = '/static/'
-STATIC_ROOT = '/path/to/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, STATIC_URL)
+# STATIC_ROOT = '/home/akouachi/cohort_back/qual/static/'
+# STATIC_ROOT = '../frontend-end-react-dev/build/static/'
 
 AUTH_USER_MODEL = 'cohort.User'
 
@@ -155,16 +168,18 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'cohort.AuthMiddleware.CustomAuthentication',
+        # 'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
-    'PAGE_SIZE': 10,
+    'PAGE_SIZE': 100,
 }
 
-JWT_SERVER_URL = "https://url/"
-JWT_SIGNING_KEY = None
-JWT_ALGORITHM = "HS256"
+JWT_SERVER_URL = env("JWT_SERVER_URL")
+JWT_SIGNING_KEY = env("JWT_SIGNING_KEY")
+JWT_ALGORITHM = env("JWT_ALGORITHM")
+JWT_APP_NAME = env("JWT_APP_NAME")
 
 SWAGGER_SETTINGS = {
     "LOGOUT_URL": "/accounts/logout/",
@@ -179,7 +194,7 @@ LOGGING = {
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': '/path/to/cohort_back_prod.backend.debug.log',
+            'filename': os.path.join(BASE_DIR, 'cohort_back_prod.backend.debug.log'),
         },
     },
     'loggers': {
@@ -202,70 +217,41 @@ LOGGING = {
 }
 
 # Celery
-CELERY_BROKER_URL = 'redis://localhost:6379'
-CELERY_RESULT_BACKEND = 'redis://localhost:6379'
+CELERY_BROKER_URL = env("CELERY_BROKER_URL")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
 CELERY_ACCEPT_CONTENT = ['application/json']
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TASK_SERIALIZER = 'json'
+CELERY_TASK_ALWAYS_EAGER = False
 
 CELERY_BEAT_SCHEDULE = {
-    'task-update-cohorts': {
-        'task': 'cohort_back.celery.import_i2b2',
-        'schedule': 2
-    },
-    'task-update-gitlab-issues': {
-        'task': 'cohort_back.celery.update_gitlab_issues',
-        'schedule': 10
-    },
-    'get_pending_jobs_status': {
-        'task': 'cohort_back.celery.get_pending_jobs_status',
-        'schedule': 5
-    }
+    # 'task-update-cohorts': {
+    #     'task': 'cohort_back.celery.import_i2b2',
+    #     'schedule': 5
+    # },
+    # 'task-update-gitlab-issues': {
+    #     'task': 'cohort_back.celery.update_gitlab_issues',
+    #     'schedule': 10
+    # },
+    #     'get_pending_jobs_status': {
+    #     'task': 'cohort_back.celery.get_pending_jobs_status',
+    #     'schedule': 5
+    # }
 }
 
 
-PG_OMOP_URL = "ip"
-PG_OMOP_DBNAME = "name"
-PG_OMOP_SCHEMA = "name"
-PG_OMOP_USER = "user"
-PG_OMOP_PASS = "password"
+PG_OMOP_URL = env("PG_OMOP_URL")
+PG_OMOP_DBNAME = env("PG_OMOP_DBNAME")
+PG_OMOP_SCHEMA = env("PG_OMOP_SCHEMA")
+PG_OMOP_USER = env("PG_OMOP_USER")
+PG_OMOP_PASS = env("PG_OMOP_PASS")
 
 VOTING_GITLAB = {
     'enable': True,
-    'api_url': 'https://gitlab.com/api/v4',
-    'project_id': "490",
-    'project_name': 'cohort360%2Fuser_requests',
-    'gitlab_private_token': 'xxxx',
+    'api_url': env("VOTING_GITLAB_API_URL"),
+    'project_id': env("VOTING_GITLAB_PROJECT_ID"),
+    'project_name': env("VOTING_GITLAB_PROJECT_NAME"),
+    'private_token': env("VOTING_GITLAB_PRIVATE_TOKEN"),
     'authorized_labels': ['To Do', 'Doing', 'Feature request', 'Bug request'],
     'post_labels': ['Bug request', 'Feature request'],
 }
-
-
-# called to format a json query stored in RequestQuerySnapshot to the format read by Fhir API
-def format_json_request(json_req: str) -> str:
-    raise NotImplementedError()
-
-
-# called to retrieve care_site_ids (perimeters) from a Json request
-def retrieve_perimeters(json_req: str) -> [str]:
-    return None
-
-
-# called when a request is about to be made to external Fhir API
-def get_fhir_authorization_header(request: Request) -> dict:
-    raise NotImplementedError()
-
-
-# called to ask a Fhir API to compute the size of a cohort given the request in the json_file
-def post_count_cohort(json_file: str, auth_headers) -> FhirCountResponse:
-    raise NotImplementedError()
-
-
-# called to ask a Fhir API to create a cohort given the request in the json_file
-def post_create_cohort(json_file: str, auth_headers) -> FhirCohortResponse:
-    raise NotImplementedError()
-
-
-# called to ask a Fhir API to validate the format of the json_file
-def post_validate_cohort(json_file: str, auth_headers) -> FhirValidateResponse:
-    raise NotImplementedError()

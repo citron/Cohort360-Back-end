@@ -8,7 +8,7 @@ from cohort.models import User
 from django.db import models
 
 from cohort_back.models import BaseModel
-from cohort_back.settings import format_json_request
+from cohort_back.conf_cohort_job_api import format_json_request
 
 PENDING_REQUEST_STATUS = "pending"
 STARTED_REQUEST_STATUS = "started"
