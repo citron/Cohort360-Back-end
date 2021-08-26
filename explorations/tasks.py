@@ -2,7 +2,7 @@ from time import sleep
 
 from celery import shared_task
 
-import cohort_back.settings as fhir_api
+import cohort_back.conf_cohort_job_api as fhir_api
 from explorations.models import CohortResult, STARTED_REQUEST_STATUS, FAILED_REQUEST_STATUS, FINISHED_REQUEST_STATUS, \
     DatedMeasure
 

@@ -1,7 +1,9 @@
-settings.py
 *.pyc
 .idea/
 *__pycache__*
 
 *.sqlite3
 venv
+
+*/.env
+*/conf*
