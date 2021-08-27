@@ -34,9 +34,9 @@ print(f"DEBUG: {DEBUG}")
 
 CORS_ORIGIN_ALLOW_ALL = DEBUG
 CORS_ORIGIN_WHITELIST = [
-    FRONT_URL,
+    f"https://{FRONT_URL}",
     "http://localhost:49033",
-    BACK_URL,
+    f"https://{BACK_URL}",
 ]
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', BACK_URL]
