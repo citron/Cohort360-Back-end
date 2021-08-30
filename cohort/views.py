@@ -1,12 +1,18 @@
 import re
 
-from django.http import QueryDict
+from django.contrib.auth.views import LoginView
+from django.http import QueryDict, HttpResponseRedirect, JsonResponse, Http404
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.debug import sensitive_post_parameters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, status
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.relations import PrimaryKeyRelatedField
 from rest_framework.response import Response
 
+from cohort.auth import IDServer
 from cohort.models import User
 from cohort.permissions import IsAdminOrOwner, OR, IsAdmin
 from cohort.serializers import UserSerializer
@@ -100,3 +106,44 @@ class UserViewSet(UserObjectsRestrictedViewSet):
         elif self.request.method in ['DELETE']:
             return OR(IsAdmin())
         return []
+
+
+class CustomLoginView(LoginView):
+    @csrf_exempt
+    def form_valid(self, form):
+        return super(CustomLoginView, self).form_valid(form)
+
+    @method_decorator(sensitive_post_parameters())
+    @csrf_exempt
+    @method_decorator(never_cache)
+    def dispatch(self, request, *args, **kwargs):
+        if self.redirect_authenticated_user and self.request.user.is_authenticated:
+            redirect_to = self.get_success_url()
+            if redirect_to == self.request.path:
+                raise ValueError(
+                    "Redirection loop for authenticated user detected. Check that "
+                    "your LOGIN_REDIRECT_URL doesn't point to a login page."
+                )
+            return HttpResponseRedirect(redirect_to)
+        if request.method.lower() in self.http_method_names:
+            handler = getattr(self, request.method.lower(), self.http_method_not_allowed)
+        else:
+            handler = self.http_method_not_allowed
+        return handler(request, *args, **kwargs)
+
+    @csrf_exempt
+    def post(self, request, *args, **kwargs):
+        return super(CustomLoginView, self).post(request, *args, **kwargs)
+
+
+@csrf_exempt
+def redirect_token_refresh_view(request):
+    if request.method != "POST":
+        raise Http404()
+
+    try:
+        res = IDServer.refresh_jwt(request.jwt_refresh_key)
+    except Exception as e:
+        raise Http404(e)
+
+    return JsonResponse(data=res)
