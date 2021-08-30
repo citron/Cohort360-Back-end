@@ -79,6 +79,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'admin_cohort.AuthMiddleware.CustomJwtSessionMiddleware',
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -179,7 +180,12 @@ REST_FRAMEWORK = {
 JWT_SERVER_URL = env("JWT_SERVER_URL")
 JWT_SIGNING_KEY = env("JWT_SIGNING_KEY")
 JWT_ALGORITHM = env("JWT_ALGORITHM")
+JWT_APP_HEADER = "X-User-App"
 JWT_APP_NAME = env("JWT_APP_NAME")
+JWT_SESSION_COOKIE = "access"
+JWT_REFRESH_COOKIE = "refresh"
+JWT_SERVER_ACCESS_KEY = "access"
+JWT_SERVER_REFRESH_KEY = "refresh"
 
 SWAGGER_SETTINGS = {
     "LOGOUT_URL": "/accounts/logout/",
