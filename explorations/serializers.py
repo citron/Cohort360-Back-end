@@ -4,7 +4,7 @@ import json
 from rest_framework import serializers
 from cohort.models import User
 from cohort.serializers import BaseSerializer, UserSerializer
-import cohort_back.settings as fhir_api
+import cohort_back.conf_cohort_job_api as fhir_api
 from cohort_back.conf_cohort_job_api import get_fhir_authorization_header, format_json_request, retrieve_perimeters
 from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure, Folder
 
