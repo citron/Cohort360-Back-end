@@ -118,12 +118,14 @@ class CustomJwtSessionMiddleware(MiddlewareMixin):
         if JWT_REFRESH_COOKIE in resp_data:
             refresh_key = resp_data[JWT_SERVER_REFRESH_KEY]
 
-        response.set_cookie(
-            JWT_SESSION_COOKIE,
-            session_key
-        )
-        response.set_cookie(
-            JWT_REFRESH_COOKIE,
-            refresh_key
-        )
+        if session_key is not None:
+            response.set_cookie(
+                JWT_SESSION_COOKIE,
+                session_key
+            )
+        if refresh_key is not None:
+            response.set_cookie(
+                JWT_REFRESH_COOKIE,
+                refresh_key
+            )
         return response
