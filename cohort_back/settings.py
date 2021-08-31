@@ -14,6 +14,7 @@ import environ
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 env = environ.Env()
 environ.Env.read_env()
 
@@ -156,9 +157,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/2.1/howto/static-files/
 
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, STATIC_URL)
-# STATIC_ROOT = '/home/akouachi/cohort_back/qual/static/'
-# STATIC_ROOT = '../frontend-end-react-dev/build/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+
 
 AUTH_USER_MODEL = 'cohort.User'
 
@@ -192,35 +192,6 @@ SWAGGER_SETTINGS = {
 }
 
 APPEND_SLASH = False
-
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'handlers': {
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(BASE_DIR, 'cohort_back_prod.backend.debug.log'),
-        },
-    },
-    'loggers': {
-#        'django': {
-#            'handlers': ['file'],
-#            'level': 'DEBUG',
-#            'propagate': True,
-#        },
-        'django.request': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': True,
-        },
-        'info': {
-            'handlers': ["file"],
-            'level': 'DEBUG',
-            'propagate': True
-        },
-    },
-}
 
 # Celery
 CELERY_BROKER_URL = env("CELERY_BROKER_URL")
