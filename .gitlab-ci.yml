@@ -1,0 +1,58 @@
+image: $IMAGE_REPOSITORY_URL/python:$CI_COMMIT_BRANCH
+
+default:
+  tags:
+    - k8s-small-generic
+
+stages:
+#  - build
+#  - test
+  - deploy
+  - release
+
+#build:
+#  stage: build
+#  before_script:
+#    - pip install flake8
+#  script:
+#    - echo "test lint"
+##    - flake8 cohort/
+##    - flake8 cohort_back/
+##    - flake8 explorations/
+#  rules:
+#    - if: ($CI_COMMIT_BRANCH == "fakedata" || $CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "qualif" || $CI_COMMIT_BRANCH == "prod_a" || $CI_COMMIT_BRANCH == "prod_b") && $ONLY_RELEASE == null
+#
+#test:
+#  stage: test
+#  before_script:
+#    - apt-get update
+#    - pip install -r requirements.txt
+#  script:
+#    - echo "Testing the code"
+##    - cd tests/ && pytest -v
+#  rules:
+#    - if: ($CI_COMMIT_BRANCH == "fakedata" || $CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "qualif" || $CI_COMMIT_BRANCH == "prod_a" || $CI_COMMIT_BRANCH == "prod_b") && $ONLY_RELEASE == null
+
+deploy:
+  image :
+    name : $IMAGE_REPOSITORY_URL/kaniko-executor:$CI_COMMIT_BRANCH
+    entrypoint : [ "" ]
+  stage: deploy
+  script:
+    - sh .gitlab/deployment.sh
+  rules:
+    - if: ('$CI_COMMIT_BRANCH =~ /^($STANDARD_CD_BRANCHES)$/' || '$CI_COMMIT_BRANCH =~ /^($PROTECTED_CD_BRANCHES)$/') && $ONLY_RELEASE == null
+    - when: never
+
+release:
+  image:
+    name: $IMAGE_REPOSITORY_URL/alpine:$CI_COMMIT_BRANCH
+    entrypoint: [ "" ]
+  stage: release
+  script:
+    - bash .gitlab/release.sh
+  rules:
+    - if: ('$CI_COMMIT_BRANCH =~ /^($STANDARD_CD_BRANCHES)$/') && $ENABLE_RELEASE == "true"
+    - if: ('$CI_COMMIT_BRANCH =~ /^($PROTECTED_CD_BRANCHES)$/') && $ENABLE_RELEASE == "true"
+      when: manual
+    - when: never
