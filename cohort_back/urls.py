@@ -23,7 +23,7 @@ from rest_framework_swagger.views import get_swagger_view
 from cohort.views import UserViewSet
 from explorations.views import SearchCriteria
 # Routers provide an easy way of automatically determining the URL conf.
-from voting.views import IssuePost, Thumbs, GitlabIssueViewSet
+from voting.views import IssuePost, GitlabIssueViewSet
 
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet)
@@ -54,7 +54,7 @@ urlpatterns = [
     url(r'^accounts/', include('cohort.urls')),
 #    url(r'^accounts/', include('rest_framework.urls')),
     url(r'^search/criteria/$', SearchCriteria.as_view(), name="search_criteria"),
-    url(r'^voting/create_issue', IssuePost.as_view(), name='voting_issues'),
-    url(r'^voting/thumbs', Thumbs.as_view(), name='voting_thumbs'),
+    url(r'^voting/create-issue', IssuePost.as_view(), name='voting_issues'),
+    # url(r'^voting/thumbs', Thumbs.as_view(), name='voting_thumbs'),
     # url(r'^groups/<str:name>/add/<str:username>$', SearchCriteria.as_view(), name="search_criteria"),
 ]
