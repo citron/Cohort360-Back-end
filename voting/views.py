@@ -56,7 +56,8 @@ class IssuePost(GenericAPIView):
         title = request.data['title']
         displayname = request.user.displayname or 'Unknown'
         description = f"{request.data['description']}\n\nEnvoyée par " \
-                      f"{displayname} ({request.user.email})"
+                      f"{displayname} ({request.user.email}) " \
+                      f"({request.user.username})"
         label = request.data['label']
 
         if label not in VOTING_GITLAB['post_labels']:
