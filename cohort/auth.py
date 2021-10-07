@@ -1,4 +1,5 @@
 import jwt
+from jwt import InvalidSignatureError, ExpiredSignatureError
 from requests import post
 
 import cohort_back.settings as settings
@@ -53,7 +54,7 @@ class IDServer:
                     access_token, settings.JWT_SIGNING_KEY, leeway=15,
                     algorithm=settings.JWT_ALGORITHM
                 )
-            except jwt.exceptions.InvalidSignatureError:
+            except (InvalidSignatureError, ExpiredSignatureError):
                 pass
         else:
             resp = post("{}/jwt/verify/".format(
