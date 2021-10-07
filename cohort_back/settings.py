@@ -230,5 +230,6 @@ VOTING_GITLAB = {
     'project_name': env("VOTING_GITLAB_PROJECT_NAME"),
     'private_token': env("VOTING_GITLAB_PRIVATE_TOKEN"),
     'authorized_labels': ['To Do', 'Doing', 'Feature request', 'Bug request'],
-    'post_labels': ['Bug request', 'Feature request', 'Other'],
 }
+VOTING_ATTACHMENT_MAX_SIZE = int(env("VOTING_ATTACHMENT_MAX_SIZE"))
+VOTING_POST_LABELS = env("VOTING_AUTHORIZED_LABELS").split(",")

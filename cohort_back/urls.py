@@ -23,11 +23,11 @@ from rest_framework_swagger.views import get_swagger_view
 from cohort.views import UserViewSet
 from explorations.views import SearchCriteria
 # Routers provide an easy way of automatically determining the URL conf.
-from voting.views import IssuePost, GitlabIssueViewSet
+from voting.views import IssuePost
 
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet)
-router.register(r'voting/issues', GitlabIssueViewSet)
+# router.register(r'voting/issues', GitlabIssueViewSet)
 
 old_schema_view = get_swagger_view(title='Cohort360 API')
 
