@@ -1,45 +1,77 @@
-from django.db.models import Sum
-from django_filters.rest_framework import DjangoFilterBackend
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
-from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import GenericAPIView
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from cohort.views import BaseViewSet
-from cohort_back.settings import VOTING_GITLAB
-from voting.celery import get_or_create_gitlab_issue
-from voting.filters import ContainsFilter, ListContainsFilter
-from voting.models import Vote, GitlabIssue
-from voting.serializers import GitlabIssueSerializer, IssuePostSerializer, ThumbSerializer
-from voting.util import req_url, post_gitlab_issue
+from cohort.models import User
+from cohort_back.serializers import ErrorSerializer
+from cohort_back.settings import VOTING_ATTACHMENT_MAX_SIZE, VOTING_POST_LABELS
+from voting.serializers import IssuePostSerializer, ApiIssueSerializer
+import voting.util as gitlab
+from voting.util import AttachmentReturned
 
-fields = ("iid", "state", 'labels',
-          "gitlab_created_at", "gitlab_updated_at", "gitlab_closed_at",
-          "title", "description",
-          "votes_positive_sum", "votes_neutral_sum", "votes_negative_sum", "votes_total_sum",)
+# fields = (
+#     "iid", "state", "labels", "gitlab_created_at", "gitlab_updated_at",
+#     "gitlab_closed_at", "title", "description", "votes_positive_sum",
+#     "votes_neutral_sum", "votes_negative_sum", "votes_total_sum",
+# )
+
+# class GitlabIssueViewSet(BaseViewSet):
+#     filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter,
+#                        ContainsFilter, ListContainsFilter)
+#
+#     queryset = GitlabIssue.objects.all()
+#     serializer_class = GitlabIssueSerializer
+#     http_method_names = ['get']
+#
+#     filterset_fields = ('iid', 'state', 'labels', 'title')
+#     ordering_fields = ('iid', 'state', 'gitlab_created_at', 'gitlab_updated_at', 'gitlab_closed_at',
+#                        'votes_positive_sum', 'votes_neutral_sum', 'votes_negative_sum', 'votes_total_sum',)
+#     ordering = ('-votes_total_sum',)
+#     search_fields = ['title', 'description', 'labels']
+#     contains_fields = ['title', 'description']
+#     list_contains_fields = ['labels']
 
 
-class GitlabIssueViewSet(BaseViewSet):
-    filter_backends = (DjangoFilterBackend, OrderingFilter, SearchFilter, ContainsFilter, ListContainsFilter)
+def build_error_message(status_code: int, msg: str) -> str:
+    return f"Error {status_code} while contacting gitlab server : {msg}"
 
-    queryset = GitlabIssue.objects.all()
-    serializer_class = GitlabIssueSerializer
-    http_method_names = ['get']
 
-    filterset_fields = ('iid', 'state', 'labels', 'title')
-    ordering_fields = ('iid', 'state', 'gitlab_created_at', 'gitlab_updated_at', 'gitlab_closed_at',
-                       'votes_positive_sum', 'votes_neutral_sum', 'votes_negative_sum', 'votes_total_sum',)
-    ordering = ('-votes_total_sum',)
-    search_fields = ['title', 'description', 'labels']
-    contains_fields = ['title', 'description']
-    list_contains_fields = ['labels']
+def build_full_description(description: str, user: User, markdown: str) -> str:
+    return f"{description}\n\nEnvoyée par " \
+           f"{user.displayname or 'Unknown'} ({user.email}) " \
+           + (
+               f"\n\nAttachment: {markdown}\nPar sécurité, vérifier que vous" \
+               f" ayez un antivirus à jour avant tout téléchargement"
+               if markdown else ""
+           )
 
 
 class IssuePost(GenericAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = IssuePostSerializer
+    parser_classes = (MultiPartParser,)
 
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter(
+                "label", openapi.IN_FORM,
+                type=openapi.TYPE_STRING,
+                description=f"Can be one of "
+                            f"{', '.join(VOTING_POST_LABELS)}"
+            ),
+        ],
+        responses={
+            201: openapi.Response('Success', ApiIssueSerializer),
+            400: openapi.Response('Invalid data', ErrorSerializer),
+            403: openapi.Response('Not authenticated'),
+            500: openapi.Response('Error within connection to Gitlab server',
+                                  ErrorSerializer)
+        },
+    )
     def post(self, request):
         """
         Post a new issue. This issue is either a bug or a feature request, and
@@ -54,39 +86,61 @@ class IssuePost(GenericAPIView):
                 )
 
         title = request.data['title']
-        displayname = request.user.displayname or 'Unknown'
-        description = f"{request.data['description']}\n\nEnvoyée par " \
-                      f"{displayname} ({request.user.email}) " \
-                      f"({request.user.username})"
+        description = request.data['description']
         label = request.data['label']
+        attach = request.data.get('attachment', None)
+        markdown = ""
 
-        if label not in VOTING_GITLAB['post_labels']:
+        if label not in VOTING_POST_LABELS:
             return Response(
                 {
-                    'error': f'label "{label}" not authorized, choices are: '
-                             f'{",".join(VOTING_GITLAB["post_labels"])}'
+                    'message': f'label "{label}" not authorized, choices are: '
+                               f'{",".join(VOTING_POST_LABELS)}'
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if len(title) == 0 or len(description) == 0:
-            return Response({'error': 'title or description empty!'},
+        if len(description) == 0:
+            return Response({'message': 'title ou description empty'},
                             status=status.HTTP_400_BAD_REQUEST)
+        if len(title) == 0:
+            return Response({'message': 'title ou description empty'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if attach:
+            if attach.size > VOTING_ATTACHMENT_MAX_SIZE:  # 10Mo
+                return Response({
+                    'message': f"Le fichier joint doit être de taille "
+                               f"inférieure à "
+                               f"{VOTING_ATTACHMENT_MAX_SIZE / 10 ** 6}Mo"
+                }, status=status.HTTP_400_BAD_REQUEST
+                )
+            attach_res = gitlab.post_gitlab_attachment(file=attach)
+            if attach_res.status_code != status.HTTP_201_CREATED:
+                return Response(ErrorSerializer({
+                    "message": build_error_message(
+                        attach_res.status_code, attach_res.text
+                    ),
+                }).data, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            gitlab_attachment = AttachmentReturned(resp=attach_res)
+            markdown = gitlab_attachment.markdown
 
-        res = post_gitlab_issue(data={
+        res = gitlab.post_gitlab_issue(data={
             'title': title,
-            'description': description,
-            'labels': label
+            'description': build_full_description(
+                description=description, user=request.user, markdown=markdown
+            ),
+            'labels': [label]
         })
         if res.status_code != 201:
-            return Response({
-                "Internal": [f"Error {res.status_code} "
-                             f"while contacting gitlab server!"],
-                "contents": res.text
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            return Response(ErrorSerializer({
+                "message": build_error_message(res.status_code, res.text),
+            }).data, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        return Response(res.json())
+        return Response(
+            ApiIssueSerializer(res.json()).data, status=status.HTTP_201_CREATED
+        )
 
 
 # class Thumbs(GenericAPIView):
