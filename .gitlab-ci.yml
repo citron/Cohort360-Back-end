@@ -2,7 +2,7 @@ image: $IMAGE_REPOSITORY_URL/python:$CI_COMMIT_BRANCH
 
 default:
   tags:
-    - k8s-small-generic
+    - $GITLAB_RUNNER_TAG
 
 stages:
   - build
