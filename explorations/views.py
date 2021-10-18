@@ -4,6 +4,7 @@ from collections import OrderedDict
 import coreapi
 import coreschema
 import django_filters
+from celery.worker.control import revoke
 from django.http import QueryDict
 from rest_framework.decorators import action
 from rest_framework import status
@@ -15,6 +16,9 @@ from rest_framework_extensions.mixins import NestedViewSetMixin
 
 from cohort.permissions import IsAdminOrOwner, OR, IsAdmin
 from cohort.views import UserObjectsRestrictedViewSet
+from cohort_back.FhirAPi import JobStatus
+from cohort_back.conf_cohort_job_api import cancel_job, \
+    get_fhir_authorization_header
 from cohort_back.views import NoDeleteViewSetMixin, NoUpdateViewSetMixin
 from explorations.models import Request, CohortResult, RequestQuerySnapshot, DatedMeasure, Folder
 from explorations.serializers import RequestSerializer, CohortResultSerializer, \
@@ -183,6 +187,83 @@ class DatedMeasureViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
             request.data["request"] = kwargs['parent_lookup_request']
 
         return super(DatedMeasureViewSet, self).create(request, *args, **kwargs)
+
+    @action(methods=['post'], detail=False, url_path='create-unique')
+    def create_unique(self, request, *args, **kwargs):
+        """
+        Demande à l'API FHIR d'annuler tous les jobs de calcul de count liés à
+        une construction de Requête avant d'en créer un nouveau
+        """
+        if 'parent_lookup_request_query_snapshot' in kwargs:
+            rqs_id = kwargs['parent_lookup_request_query_snapshot']
+        elif "request_query_snapshot_id" in request.data:
+            rqs_id = request.data.get('request_query_snapshot_id')
+        else:
+            return Response(
+                dict(message="'request_query_snapshot_id' not provided"),
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        headers = get_fhir_authorization_header(request)
+        try:
+            rqs: RequestQuerySnapshot = RequestQuerySnapshot.objects.get(
+                pk=rqs_id
+            )
+        except RequestQuerySnapshot.DoesNotExist:
+            return Response(
+                dict(
+                    message="No existing request_query_snapshot to "
+                            "'request_query_snapshot_id' provided"
+                ),
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        for job_to_cancel in rqs.request.dated_measures.filter(
+                request_job_status=JobStatus.RUNNING.name.lower()
+        ):
+            try:
+                cancel_job(job_to_cancel.request_job_id, headers)
+            except Exception as e:
+                return Response(
+                    dict(
+                        message=f"Error while cancelling job "
+                                f"'{job_to_cancel.request_job_id}', bound "
+                                f"to dated-measure '{job_to_cancel.uuid}': "
+                                f"{str(e)}"
+                    ), status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+        for job_to_cancel in rqs.request.dated_measures.filter(
+                request_job_status=JobStatus.PENDING.name.lower()
+        ):
+            try:
+                revoke(task_id=job_to_cancel.count_task_id, terminate=True)
+                job_to_cancel.request_job_status = JobStatus.KILLED.name.lower()
+                job_to_cancel.save()
+            except Exception as e:
+                return Response(
+                    dict(message=str(e)), status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+        return self.create(request, *args, **kwargs)
+        return Response(dict(hehe=headers))
+
+    @action(methods=['patch'], detail=True, url_path='abort')
+    def abort(self):
+        """
+        Demande à l'API FHIR d'annuler le job de calcul de count d'une requête
+        """
+        instance: DatedMeasure = self.get_object()
+        try:
+            cancel_job(
+                instance.request_job_id,
+                get_fhir_authorization_header(request)
+            )
+        except Exception as e:
+            return Response(
+                dict(message=str(e)),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class RequestQuerySnapshotViewSet(NestedViewSetMixin, NoDeleteViewSetMixin,
