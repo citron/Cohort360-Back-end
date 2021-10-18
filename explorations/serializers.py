@@ -55,14 +55,22 @@ class DatedMeasureSerializer(BaseSerializer):
     def update(self, instance, validated_data):
         for f in ['owner', 'request', 'request_query_snapshot']:
             if f in validated_data:
-                raise serializers.ValidationError(f'{f} field cannot bu updated manually')
-        return super(DatedMeasureSerializer, self).update(instance, validated_data)
+                raise serializers.ValidationError(
+                    f'{f} field cannot bu updated manually'
+                )
+        return super(DatedMeasureSerializer, self).update(
+            instance, validated_data
+        )
 
     def partial_update(self, instance, validated_data):
         for f in ['owner', 'request', 'request_query_snapshot']:
             if f in validated_data:
-                raise serializers.ValidationError(f'{f} field cannot bu updated manually')
-        return super(DatedMeasureSerializer, self).partial_update(instance, validated_data)
+                raise serializers.ValidationError(
+                    f'{f} field cannot bu updated manually'
+                )
+        return super(DatedMeasureSerializer, self).partial_update(
+            instance, validated_data
+        )
 
     def create(self, validated_data):
         rqs = validated_data.get("request_query_snapshot", None)
@@ -71,25 +79,37 @@ class DatedMeasureSerializer(BaseSerializer):
         fhir_datetime = validated_data.get("fhir_datetime", None)
 
         if rqs is None:
-            raise serializers.ValidationError("You have to provide a request_query_snapshot_id to bind the dated"
-                                              " measure to it")
+            raise serializers.ValidationError(
+                "You have to provide a request_query_snapshot_id to bind "
+                "the dated measure to it"
+            )
         if req is not None:
             if req.uuid != rqs.request.uuid:
                 raise serializers.ValidationError(
-                    "YOu cannot provide different from the one the query_snapshot is bound to")
+                    "You cannot provide different from the one the "
+                    "query_snapshot is bound to"
+                )
         else:
             validated_data["request_id"] = rqs.request.uuid
 
-        if (measure is not None and fhir_datetime is None) or (measure is None and fhir_datetime is not None):
-            raise serializers.ValidationError("If you provide measure or fhir_datetime, you have to provide the other")
+        if (measure is not None and fhir_datetime is None)\
+                or (measure is None and fhir_datetime is not None):
+            raise serializers.ValidationError(
+                "If you provide measure or fhir_datetime, you have to "
+                "provide the other"
+            )
 
-        res_dm = super(DatedMeasureSerializer, self).create(validated_data=validated_data)
+        res_dm = super(DatedMeasureSerializer, self).create(
+            validated_data=validated_data
+        )
 
         if measure is None:
             try:
                 from explorations.tasks import get_count_task
                 task = get_count_task.delay(
-                    get_fhir_authorization_header(self.context.get("request", None)),
+                    get_fhir_authorization_header(
+                        self.context.get("request", None)
+                    ),
                     format_json_request(str(rqs.serialized_query)),
                     res_dm.uuid
                 )

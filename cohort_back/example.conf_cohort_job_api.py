@@ -1,6 +1,8 @@
+from django.db.models import Model
 from rest_framework.request import Request
 
-from cohort_back.FhirAPi import FhirCountResponse, FhirCohortResponse, FhirValidateResponse
+from cohort_back.FhirAPi import FhirCountResponse, FhirCohortResponse, \
+    FhirValidateResponse, JobStatus
 
 
 def format_json_request(json_req: str) -> str:
@@ -37,12 +39,12 @@ def get_fhir_authorization_header(request: Request) -> dict:
     raise NotImplementedError()
 
 
-def post_count_cohort(json_file: str, auth_headers) -> FhirCountResponse:
+def cancel_job(job_id: str, auth_headers) -> JobStatus:
     """
-    Called to ask a Fhir API to compute the size of a cohort given
-    the request in the json_file
-    :param json_file:
-    :type json_file:
+    Sends a request to FHIR API to abort a job
+    Its status will be then set to KILLED if it was not FINISHED already
+    :param job_id:
+    :type job_id:
     :param auth_headers:
     :type auth_headers:
     :return:
@@ -51,7 +53,31 @@ def post_count_cohort(json_file: str, auth_headers) -> FhirCountResponse:
     raise NotImplementedError()
 
 
-def post_create_cohort(json_file: str, auth_headers) -> FhirCohortResponse:
+def post_count_cohort(
+        json_file: str, auth_headers, log_prefix: str = "",
+        dated_measure: Model = None
+) -> FhirCountResponse:
+    """
+    Called to ask a Fhir API to compute the size of a cohort given
+    the request in the json_file
+    :param json_file:
+    :type json_file:
+    :param auth_headers:
+    :type auth_headers:
+    :param log_prefix:
+    :type log_prefix: str
+    :param dated_measure:
+    :type dated_measure: DatedMeasure
+    :return:
+    :rtype:
+    """
+    raise NotImplementedError()
+
+
+def post_create_cohort(
+        json_file: str, auth_headers, log_prefix: str = "",
+        cohort_result: Model = None
+) -> FhirCohortResponse:
     """
     Called to ask a Fhir API to create a cohort given the request
     in the json_file
@@ -59,6 +85,10 @@ def post_create_cohort(json_file: str, auth_headers) -> FhirCohortResponse:
     :type json_file:
     :param auth_headers:
     :type auth_headers:
+    :param log_prefix:
+    :type log_prefix: str
+    :param cohort_result:
+    :type cohort_result: CohortResult
     :return:
     :rtype:
     """

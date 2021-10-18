@@ -7,22 +7,10 @@ from django.contrib.postgres.fields import ArrayField
 from cohort.models import User
 from django.db import models
 
+from cohort_back.FhirAPi import JobStatus
 from cohort_back.models import BaseModel
 from cohort_back.conf_cohort_job_api import format_json_request
 
-PENDING_REQUEST_STATUS = "pending"
-STARTED_REQUEST_STATUS = "started"
-CANCELLED_REQUEST_STATUS = "cancelled"
-FINISHED_REQUEST_STATUS = "finished"
-FAILED_REQUEST_STATUS = "failed"
-
-REQUEST_STATUS_CHOICES = [
-    (PENDING_REQUEST_STATUS, PENDING_REQUEST_STATUS),
-    (STARTED_REQUEST_STATUS, STARTED_REQUEST_STATUS),
-    (CANCELLED_REQUEST_STATUS, CANCELLED_REQUEST_STATUS),
-    (FAILED_REQUEST_STATUS, FAILED_REQUEST_STATUS),
-    (FINISHED_REQUEST_STATUS, FINISHED_REQUEST_STATUS)
-]
 
 COHORT_TYPE_CHOICES = [
     ("IMPORT_I2B2", "Previous cohorts imported from i2b2.",),
@@ -127,7 +115,10 @@ class RequestQuerySnapshot(BaseModel):
         # import explorations.tasks as tasks
         # task = tasks.get_count_task.delay(auth_headers, format_json_request(str(self.serialized_query)), dm.uuid)
         from explorations.tasks import get_count_task
-        task = get_count_task.delay(auth_headers, format_json_request(str(self.serialized_query)), dm.uuid)
+        task = get_count_task.delay(
+            auth_headers, format_json_request(str(self.serialized_query)),
+            dm.uuid
+        )
         dm.count_task_id = task.id
         dm.save()
 
@@ -173,9 +164,13 @@ class DatedMeasure(BaseModel):
     possibly generating a Cohort/Group in Fhir.
     """
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_request_query_results')
-    request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE,
-                                               related_name='dated_measures')
-    request = models.ForeignKey(Request, on_delete=models.CASCADE)
+    request_query_snapshot = models.ForeignKey(
+        RequestQuerySnapshot, on_delete=models.CASCADE,
+        related_name='dated_measures'
+    )
+    request = models.ForeignKey(
+        Request, on_delete=models.CASCADE, related_name='dated_measures'
+    )
 
     fhir_datetime = models.DateTimeField(null=True, blank=False)
     measure = models.BigIntegerField(null=True, blank=False)  # Size of potential cohort as returned by SolR
@@ -187,8 +182,11 @@ class DatedMeasure(BaseModel):
 
     count_task_id = models.TextField(blank=True)
     request_job_id = models.TextField(blank=True)
-    request_job_status = models.CharField(max_length=10, choices=REQUEST_STATUS_CHOICES,
-                                          default=PENDING_REQUEST_STATUS)
+    request_job_status = models.CharField(
+        max_length=10,
+        choices=[(e.name.lower(), e.name.lower()) for e in JobStatus],
+        default=JobStatus.PENDING.name.lower()
+    )
     request_job_fail_msg = models.TextField(blank=True)
     request_job_duration = models.TextField(blank=True)
 
@@ -209,8 +207,11 @@ class CohortResult(BaseModel):
 
     create_task_id = models.TextField(blank=True)
     request_job_id = models.TextField(blank=True)
-    request_job_status = models.CharField(max_length=10, choices=REQUEST_STATUS_CHOICES,
-                                          default=PENDING_REQUEST_STATUS)
+    request_job_status = models.CharField(
+        max_length=10,
+        choices=[(e.name.lower(), e.name.lower()) for e in JobStatus],
+        default=JobStatus.PENDING.name.lower()
+    )
     request_job_fail_msg = models.TextField(blank=True)
     request_job_duration = models.TextField(blank=True)
 
