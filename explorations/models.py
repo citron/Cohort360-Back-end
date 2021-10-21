@@ -198,12 +198,18 @@ class CohortResult(BaseModel):
     description = models.TextField(blank=True, null=True)
     favorite = models.BooleanField(default=False)
 
-    request_query_snapshot = models.ForeignKey(RequestQuerySnapshot, on_delete=models.CASCADE,
-                                               related_name='cohort_results')
-    request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='request_cohorts')
+    request_query_snapshot = models.ForeignKey(
+        RequestQuerySnapshot, on_delete=models.CASCADE,
+        related_name='cohort_results'
+    )
+    request = models.ForeignKey(
+        Request, on_delete=models.CASCADE, related_name='request_cohorts'
+    )
 
     fhir_group_id = models.CharField(max_length=64, blank=True)
-    dated_measure = models.ForeignKey(DatedMeasure, related_name="cohort", on_delete=models.CASCADE)
+    dated_measure = models.ForeignKey(
+        DatedMeasure, related_name="cohort", on_delete=models.CASCADE
+    )
 
     create_task_id = models.TextField(blank=True)
     request_job_id = models.TextField(blank=True)
@@ -216,7 +222,10 @@ class CohortResult(BaseModel):
     request_job_duration = models.TextField(blank=True)
 
     # will depend on the right (pseudo-anonymised or nominative) you have on the care_site
-    type = models.CharField(max_length=20, choices=COHORT_TYPE_CHOICES, default=MY_COHORTS_COHORT_TYPE)
+    type = models.CharField(
+        max_length=20, choices=COHORT_TYPE_CHOICES,
+        default=MY_COHORTS_COHORT_TYPE
+    )
 
     class Meta:
         unique_together = []
