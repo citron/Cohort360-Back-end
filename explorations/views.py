@@ -16,6 +16,7 @@ from rest_framework_extensions.mixins import NestedViewSetMixin
 
 from cohort.permissions import IsAdminOrOwner, OR, IsAdmin
 from cohort.views import UserObjectsRestrictedViewSet
+from cohort_back import app
 from cohort_back.FhirAPi import JobStatus
 from cohort_back.conf_cohort_job_api import cancel_job, \
     get_fhir_authorization_header
@@ -237,7 +238,8 @@ class DatedMeasureViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
                 request_job_status=JobStatus.PENDING.name.lower()
         ):
             try:
-                revoke(task_id=job_to_cancel.count_task_id, terminate=True)
+                app.control.revoke(job_to_cancel.count_task_id)
+                # revoke(task_id=job_to_cancel.count_task_id, terminate=True)
                 job_to_cancel.request_job_status = JobStatus.KILLED.name.lower()
                 job_to_cancel.save()
             except Exception as e:
@@ -249,7 +251,7 @@ class DatedMeasureViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
         return Response(dict(hehe=headers))
 
     @action(methods=['patch'], detail=True, url_path='abort')
-    def abort(self):
+    def abort(self, request, *args, **kwargs):
         """
         Demande à l'API FHIR d'annuler le job de calcul de count d'une requête
         """

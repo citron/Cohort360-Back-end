@@ -1,5 +1,3 @@
-from itertools import groupby
-
 import math
 import random
 import string
@@ -13,13 +11,14 @@ from django.utils.datetime_safe import datetime
 from rest_framework import status
 from rest_framework.test import force_authenticate
 
-from cohort_back.FhirAPi import FhirValidateResponse, FhirCountResponse, FhirCohortResponse
+from cohort_back.FhirAPi import FhirValidateResponse, FhirCountResponse, \
+    FhirCohortResponse, JobStatus
 from cohort_back.tests import BaseTests
-from explorations.models import Request, RequestQuerySnapshot, DatedMeasure, CohortResult, PENDING_REQUEST_STATUS, \
-    FINISHED_REQUEST_STATUS, FAILED_REQUEST_STATUS, REQUEST_STATUS_CHOICES, COHORT_TYPE_CHOICES, Folder
+from explorations.models import Request, RequestQuerySnapshot, DatedMeasure, \
+    CohortResult, COHORT_TYPE_CHOICES, Folder
 from explorations.tasks import get_count_task, create_cohort_task
-from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet, DatedMeasureViewSet, CohortResultViewSet, \
-    FolderViewSet
+from explorations.views import RequestViewSet, RequestQuerySnapshotViewSet,\
+    DatedMeasureViewSet, CohortResultViewSet, FolderViewSet
 
 EXPLORATIONS_URL = "/explorations"
 FOLDERS_URL = f"{EXPLORATIONS_URL}/folders"
@@ -28,7 +27,7 @@ RQS_URL = f"{EXPLORATIONS_URL}/request-query-snapshots"
 DATED_MEASURES_URL = f"{EXPLORATIONS_URL}/dated-measures"
 COHORTS_URL = f"{EXPLORATIONS_URL}/cohorts"
 
-
+REQUEST_STATUS_CHOICES = [(e.name.lower(), e.name.lower()) for e in JobStatus]
 # TODO : test for post save0 get saved, get last_modified,
 # TODO : make test for create/get Request's Rqs, Rqs' dated_measure, Rqs' cohortresult
 # TODO : prevent add rqs with previous not on active branch
@@ -857,7 +856,7 @@ class DatedMeasuresCreateTests(DatedMeasuresTests):
         read_only_fields = dict(
             count_task_id="test_task_id",
             request_job_id="test_job_id",
-            request_job_status=FAILED_REQUEST_STATUS,
+            request_job_status=JobStatus.ERROR.name.lower(),
             request_job_fail_msg="test_fail_msg",
             request_job_duration=1001,
         )
@@ -937,7 +936,7 @@ class DatedMeasuresCreateTests(DatedMeasuresTests):
                 owner=self.user1,
                 request_query_snapshot=self.user1_req1_branch2_snap2,
                 count_task_id=test_task_id,
-                request_job_status=PENDING_REQUEST_STATUS
+                request_job_status=JobStatus.PENDING.name.lower()
             ).first()
         )
 
@@ -1067,7 +1066,7 @@ class DatedMeasuresUpdateTests(DatedMeasuresTests):
         read_only_fields = dict(
             create_task_id="test_task_id",
             request_job_id="test_job_id",
-            request_job_status=FINISHED_REQUEST_STATUS,
+            request_job_status=JobStatus.FINISHED.name.lower(),
             request_job_fail_msg="test_fail_msg",
             request_job_duration=1001,
         )
@@ -1581,7 +1580,7 @@ class CohortsCreateTests(CohortsTests):
         read_only_fields = dict(
             create_task_id="test_task_id",
             request_job_id="test_job_id",
-            request_job_status=FINISHED_REQUEST_STATUS,
+            request_job_status=JobStatus.FINISHED.name.lower(),
             request_job_fail_msg="test_fail_msg",
             request_job_duration=1001,
         )
@@ -1685,7 +1684,7 @@ class CohortsCreateTests(CohortsTests):
             description=test_description,
             request_query_snapshot=self.user1_req1_branch2_snap3.uuid,
             create_task_id=test_task_id,
-            request_job_status=PENDING_REQUEST_STATUS
+            request_job_status=JobStatus.PENDING.name.lower()
         ).first()
         self.assertIsNotNone(cr)
         self.assertIsNone(cr.dated_measure.fhir_datetime)
@@ -1943,7 +1942,7 @@ class CohortsUpdateTests(CohortsTests):
         read_only_fields = dict(
             create_task_id="test_task_id",
             request_job_id="test_job_id",
-            request_job_status=FINISHED_REQUEST_STATUS,
+            request_job_status=JobStatus.FINISHED.name.lower(),
             request_job_fail_msg="test_fail_msg",
             request_job_duration=1001,
         )
@@ -2076,7 +2075,7 @@ class TasksTests(RqsTests):
             request=self.user1_req1,
             request_query_snapshot=self.user1_req1_snap1,
             count_task_id="task_id",
-            request_job_status=PENDING_REQUEST_STATUS
+            request_job_status=JobStatus.PENDING.name.lower()
         )
         self.user1_req1_snap1_empty_dm.save()
 
@@ -2087,7 +2086,7 @@ class TasksTests(RqsTests):
             name="My empty cohort",
             description="so empty",
             create_task_id="task_id",
-            request_job_status=PENDING_REQUEST_STATUS,
+            request_job_status=JobStatus.PENDING.name.lower(),
             dated_measure=self.user1_req1_snap1_empty_dm
         )
         self.user1_req1_snap1_empty_cohort.save()
@@ -2113,7 +2112,7 @@ class TasksTests(RqsTests):
             measure=test_count,
             fhir_datetime=test_datetime,
             request_job_duration=test_job_duration,
-            request_job_status=FINISHED_REQUEST_STATUS,
+            request_job_status=JobStatus.FINISHED.name.lower(),
             request_job_id=test_job_id,
             count_task_id=self.user1_req1_snap1_empty_dm.count_task_id
         ).first()
@@ -2140,7 +2139,7 @@ class TasksTests(RqsTests):
             uuid=self.user1_req1_snap1_empty_dm.uuid,
             request_job_id=test_fhir_job_id,
             request_job_duration=test_job_duration,
-            request_job_status=FAILED_REQUEST_STATUS,
+            request_job_status=JobStatus.ERROR.name.lower(),
             request_job_fail_msg=test_err_msg,
             count_task_id=self.user1_req1_snap1_empty_dm.count_task_id
         ).first()
@@ -2171,7 +2170,7 @@ class TasksTests(RqsTests):
         new_cr = CohortResult.objects.filter(
             uuid=self.user1_req1_snap1_empty_cohort.uuid,
             request_job_duration=test_job_duration,
-            request_job_status=FINISHED_REQUEST_STATUS,
+            request_job_status=JobStatus.FINISHED.name.lower(),
             request_job_id=test_job_id,
             fhir_group_id=test_group_id,
             create_task_id=self.user1_req1_snap1_empty_cohort.create_task_id
@@ -2205,7 +2204,7 @@ class TasksTests(RqsTests):
             uuid=self.user1_req1_snap1_empty_cohort.uuid,
             request_job_id=test_fhir_job_id,
             request_job_duration=test_job_duration,
-            request_job_status=FAILED_REQUEST_STATUS,
+            request_job_status=JobStatus.ERROR.name.lower(),
             request_job_fail_msg=test_err_msg,
             create_task_id=self.user1_req1_snap1_empty_cohort.create_task_id
         ).first()
