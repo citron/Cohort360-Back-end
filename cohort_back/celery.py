@@ -36,6 +36,7 @@ def import_i2b2():
     from explorations.models import CohortResult, I2B2_COHORT_TYPE, MY_ORGANISATIONS_COHORT_TYPE,\
         MY_PATIENTS_COHORT_TYPE
     from cohort.import_i2b2 import OmopCohort, OmopCareSiteCohort
+    from cohort_back.FhirAPi import JobStatus
 
     users = User.objects.all()
     usernames = [u.username for u in users]
@@ -46,8 +47,8 @@ def import_i2b2():
     BaseOmopCohort = TypeVar("BaseOmopCohort", OmopCohort, OmopCareSiteCohort)
 
     def create_cohort(user, cohort: BaseOmopCohort, cohort_type):
-        from explorations.models import CohortResult, Request, RequestQuerySnapshot, DatedMeasure, \
-            FINISHED_REQUEST_STATUS
+        from explorations.models import CohortResult, Request,\
+            RequestQuerySnapshot, DatedMeasure
         name = cohort.name[:50] if cohort.name else ""
         description = cohort.description[:50] if cohort.description else ""
         fhir_id = cohort.fhir_id
@@ -101,7 +102,7 @@ def import_i2b2():
             request=r,
             fhir_group_id=fhir_id,
             type=cohort_type,
-            request_job_status=FINISHED_REQUEST_STATUS
+            request_job_status=JobStatus.FINISHED.name.lower()
         )
         c.save()
 
@@ -123,7 +124,10 @@ def import_i2b2():
 
         # Delete old organizations that do not exist anymore
         CohortResult.objects \
-            .filter(owner=user, type__in=[MY_ORGANISATIONS_COHORT_TYPE, MY_PATIENTS_COHORT_TYPE]) \
+            .filter(
+                owner=user,
+                type__in=[MY_ORGANISATIONS_COHORT_TYPE, MY_PATIENTS_COHORT_TYPE]
+            ) \
             .exclude(uuid__in=[c.uuid for c in created_cohorts]).delete()
 
 
@@ -136,9 +140,12 @@ def update_gitlab_issues():
 
 @app.task()
 def get_pending_jobs_status():
-    from explorations.models import CohortResult, STARTED_REQUEST_STATUS, PENDING_REQUEST_STATUS
+    from explorations.models import CohortResult
+    from cohort_back.FhirAPi import JobStatus
     crs = CohortResult.objects.filter(
-        request_job_status__in=[PENDING_REQUEST_STATUS, STARTED_REQUEST_STATUS]
+        request_job_status__in=[
+            JobStatus.PENDING.name.lower(), JobStatus.STARTED.name.lower()
+        ]
     )
 
     for cr in crs:

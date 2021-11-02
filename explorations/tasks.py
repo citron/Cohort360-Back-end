@@ -10,7 +10,7 @@ from explorations.models import CohortResult, DatedMeasure
 def update_instance_failed(
         instance, msg, job_duration, fhir_job_id, job_status: JobStatus
 ):
-    instance.request_job_status = job_status.name
+    instance.request_job_status = job_status.name.lower()
     instance.request_job_fail_msg = msg
     instance.request_job_duration = job_duration
     instance.request_job_id = fhir_job_id
@@ -85,7 +85,11 @@ def get_count_task(auth_headers: dict, json_file: str, dm_uuid: str):
     while dm is None and tries <= 5:
         dm = DatedMeasure.objects.filter(uuid=dm_uuid).first()
         if dm is None:
-            log_count_task(dm_uuid, f"Error: could not find DatedMeasure to update after {tries - 1} sec")
+            log_count_task(
+                dm_uuid,
+                f"Error: could not find DatedMeasure to update"
+                f" after {tries - 1} sec"
+            )
             tries = tries + 1
             sleep(1)
 
