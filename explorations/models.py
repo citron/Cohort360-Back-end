@@ -32,16 +32,22 @@ PATIENT_REQUEST_TYPE = REQUEST_DATA_TYPE_CHOICES[0][0]
 
 
 class Folder(BaseModel):
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='folders')
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='folders'
+    )
     name = models.CharField(max_length=50)
-    parent_folder = models.ForeignKey("explorations.Folder", on_delete=models.CASCADE, related_name="children_folders",
-                                      null=True)
+    parent_folder = models.ForeignKey(
+        "explorations.Folder", on_delete=models.CASCADE,
+        related_name="children_folders", null=True
+    )
 
 
 class Request(BaseModel):
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_requests')
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='user_requests'
+    )
 
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     favorite = models.BooleanField(default=False)
 
@@ -194,7 +200,7 @@ class DatedMeasure(BaseModel):
 class CohortResult(BaseModel):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_cohorts')
 
-    name = models.CharField(max_length=50, blank=True, null=True)
+    name = models.CharField(max_length=255, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     favorite = models.BooleanField(default=False)
 
