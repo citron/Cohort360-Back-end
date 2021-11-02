@@ -220,7 +220,7 @@ class DatedMeasureViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
             )
 
         for job_to_cancel in rqs.request.dated_measures.filter(
-                request_job_status=JobStatus.RUNNING.name.lower()
+                request_job_status=JobStatus.STARTED.name.lower()
         ):
             try:
                 cancel_job(job_to_cancel.request_job_id, headers)
@@ -268,8 +268,10 @@ class DatedMeasureViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
             )
 
 
-class RequestQuerySnapshotViewSet(NestedViewSetMixin, NoDeleteViewSetMixin,
-                                  NoUpdateViewSetMixin, UserObjectsRestrictedViewSet):
+class RequestQuerySnapshotViewSet(
+    NestedViewSetMixin, NoDeleteViewSetMixin, NoUpdateViewSetMixin,
+    UserObjectsRestrictedViewSet
+):
     queryset = RequestQuerySnapshot.objects.all()
     serializer_class = RequestQuerySnapshotSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']

@@ -51,19 +51,28 @@ class Request(BaseModel):
     description = models.TextField(blank=True)
     favorite = models.BooleanField(default=False)
 
-    parent_folder = models.ForeignKey(Folder, on_delete=models.CASCADE, related_name="requests", null=False)
+    parent_folder = models.ForeignKey(
+        Folder, on_delete=models.CASCADE, related_name="requests", null=False
+    )
 
-    data_type_of_query = models.CharField(max_length=9, choices=REQUEST_DATA_TYPE_CHOICES, default=PATIENT_REQUEST_TYPE)
+    data_type_of_query = models.CharField(
+        max_length=9, choices=REQUEST_DATA_TYPE_CHOICES,
+        default=PATIENT_REQUEST_TYPE
+    )
 
     def last_request_snapshot(self):
-        return RequestQuerySnapshot.objects.filter(request__uuid=self.uuid).latest('created_at')
+        return RequestQuerySnapshot.objects.filter(request__uuid=self.uuid)\
+            .latest('created_at')
 
     def saved_snapshot(self):
         return self.query_snapshots.filter(saved=True).first()
 
 
 class RequestQuerySnapshot(BaseModel):
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_request_query_snapshots')
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='user_request_query_snapshots'
+    )
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='query_snapshots')
 
     serialized_query = models.TextField(default="{}")
