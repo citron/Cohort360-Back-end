@@ -135,11 +135,13 @@ class CohortResultSerializer(BaseSerializer):
         queryset=DatedMeasure.objects.all(), required=False
     )
 
-    global_estimate = serializers.BooleanField(write_only=True)
+    global_estimate = serializers.BooleanField(
+        write_only=True, allow_null=True, default=True
+    )
 
     fhir_group_id = serializers.CharField(
         allow_blank=True, allow_null=True, required=False
-    )
+        )
 
     class Meta:
         model = CohortResult
@@ -285,16 +287,10 @@ class ReducedRequestQuerySnapshotSerializer(BaseSerializer):
 
 
 class RequestQuerySnapshotSerializer(BaseSerializer):
-    # request_id = PrimaryKeyRelatedFieldWithOwner(source='request', queryset=Request.objects.all(), required=False)
-    # owner_id = UserPrimaryKeyRelatedField(source='owner', queryset=User.objects.all(), required=False)
-    # previous_snapshot_id = PrimaryKeyRelatedFieldWithOwner(
-    #     source='previous_snapshot', queryset=RequestQuerySnapshot.objects.all(), required=False
-    # )
     request = PrimaryKeyRelatedFieldWithOwner(queryset=Request.objects.all(), required=False)
     previous_snapshot = PrimaryKeyRelatedFieldWithOwner(required=False, queryset=RequestQuerySnapshot.objects.all())
     dated_measures = DatedMeasureSerializer(many=True, read_only=True)
     cohort_results = CohortResultSerializer(many=True, read_only=True)
-    # request = serializers.UUIDField(required=False)
 
     class Meta:
         model = RequestQuerySnapshot

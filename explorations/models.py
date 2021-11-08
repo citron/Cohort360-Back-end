@@ -185,7 +185,10 @@ class DatedMeasure(BaseModel):
     This is an intermediary result giving only limited info before
     possibly generating a Cohort/Group in Fhir.
     """
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_request_query_results')
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='user_request_query_results'
+    )
     request_query_snapshot = models.ForeignKey(
         RequestQuerySnapshot, on_delete=models.CASCADE,
         related_name='dated_measures'
