@@ -30,6 +30,13 @@ REQUEST_DATA_TYPE_CHOICES = [
 ]
 PATIENT_REQUEST_TYPE = REQUEST_DATA_TYPE_CHOICES[0][0]
 
+SNAPSHOT_DM_MODE = "Snapshot"
+GLOBAL_DM_MODE = "Global"
+DATED_MEASURE_MODE_CHOICES = [
+    (SNAPSHOT_DM_MODE, SNAPSHOT_DM_MODE),
+    (GLOBAL_DM_MODE, GLOBAL_DM_MODE)
+]
+
 
 class Folder(BaseModel):
     owner = models.ForeignKey(
@@ -189,6 +196,8 @@ class DatedMeasure(BaseModel):
 
     fhir_datetime = models.DateTimeField(null=True, blank=False)
     measure = models.BigIntegerField(null=True, blank=False)  # Size of potential cohort as returned by SolR
+    measure_min = models.BigIntegerField(null=True, blank=False)
+    measure_max = models.BigIntegerField(null=True, blank=False)
     measure_male = models.BigIntegerField(null=True, blank=True)
     measure_unknown = models.BigIntegerField(null=True, blank=True)
     measure_deceased = models.BigIntegerField(null=True, blank=True)
@@ -205,9 +214,16 @@ class DatedMeasure(BaseModel):
     request_job_fail_msg = models.TextField(blank=True)
     request_job_duration = models.TextField(blank=True)
 
+    mode = models.CharField(
+        max_length=20, choices=DATED_MEASURE_MODE_CHOICES,
+        default=SNAPSHOT_DM_MODE, null=True
+    )
+
 
 class CohortResult(BaseModel):
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_cohorts')
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='user_cohorts'
+    )
 
     name = models.CharField(max_length=255, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
@@ -225,6 +241,10 @@ class CohortResult(BaseModel):
     dated_measure = models.ForeignKey(
         DatedMeasure, related_name="cohort", on_delete=models.CASCADE
     )
+    dated_measure_global = models.ForeignKey(
+        DatedMeasure, related_name="restricted_cohort", null=True,
+        on_delete=models.SET_NULL
+    )
 
     create_task_id = models.TextField(blank=True)
     request_job_id = models.TextField(blank=True)
@@ -236,7 +256,8 @@ class CohortResult(BaseModel):
     request_job_fail_msg = models.TextField(blank=True)
     request_job_duration = models.TextField(blank=True)
 
-    # will depend on the right (pseudo-anonymised or nominative) you have on the care_site
+    # will depend on the right (pseudo-anonymised or nominative) you
+    # have on the care_site
     type = models.CharField(
         max_length=20, choices=COHORT_TYPE_CHOICES,
         default=MY_COHORTS_COHORT_TYPE
