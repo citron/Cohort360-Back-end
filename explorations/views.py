@@ -104,17 +104,9 @@ class CohortResultViewSet(NestedViewSetMixin, UserObjectsRestrictedViewSet):
         if 'parent_lookup_request' in kwargs:
             request.data["request"] = kwargs['parent_lookup_request']
 
-        # # temp fix untill _id is not used
-        # if 'request_query_snapshot_id' in request.data:
-        #     request.data['request_query_snapshot'] = request.data['request_query_snapshot_id']
-        # if 'dated_measure_id' in request.data:
-        #     request.data['dated_measure'] = request.data['dated_measure_id']
-
         if 'dated_measure_id' not in request.data:
             if 'dated_measure' in request.data:
                 dated_measure = request.data['dated_measure']
-                # if not isinstance(dated_measure, dict):
-                #     return Response({"message": "dated_measure should be an object"}, status=status.HTTP_400_BAD_REQUEST)
                 if isinstance(dated_measure, dict):
                     if "request_query_snapshot" in request.data:
                         dated_measure["request_query_snapshot"] = request.data["request_query_snapshot"]

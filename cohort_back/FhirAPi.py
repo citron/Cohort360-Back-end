@@ -26,6 +26,7 @@ class FhirCountResponse(FhirValidateResponse):
             self, count: int = None, count_male: int = None,
             count_unknown: int = None, count_deceased: int = None,
             count_alive: int = None, count_female: int = None,
+            count_min: int = None, count_max: int = None,
             fhir_datetime=None, fhir_job_id: str = "", job_duration=None,
             success: bool = False, err_msg: str = "",
             fhir_job_status: JobStatus = JobStatus.UNKNOWN,
@@ -39,6 +40,8 @@ class FhirCountResponse(FhirValidateResponse):
         self.count_deceased = count_deceased
         self.count_alive = count_alive
         self.count_female = count_female
+        self.count_min = count_min
+        self.count_max = count_max
         self.fhir_datetime = fhir_datetime
         self.job_duration = job_duration
         self.fhir_job_id = fhir_job_id
