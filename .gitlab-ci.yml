@@ -10,6 +10,18 @@ stages:
   - deploy
   - release
 
+.default_rules:
+  rules:
+    - if: ($CI_COMMIT_BRANCH =~ /${STANDARD_CD_BRANCHES}/ || $CI_COMMIT_BRANCH =~ /${PROTECTED_CD_BRANCHES}/) && $ONLY_RELEASE == null
+    - when: never
+
+.release_rules:
+  rules:
+    - if: ($CI_COMMIT_BRANCH =~ /${STANDARD_CD_BRANCHES}/) && $ENABLE_RELEASE == "true"
+    - if: ($CI_COMMIT_BRANCH =~ /${$PROTECTED_CD_BRANCHES}/) && $ENABLE_RELEASE == "true"
+      when: manual
+    - when: never
+
 build:
   stage: build
   before_script:
@@ -20,8 +32,7 @@ build:
 #    - flake8 cohort_back/
 #    - flake8 explorations/
   rules:
-    - if: ('$CI_COMMIT_BRANCH =~ /^($STANDARD_CD_BRANCHES)$/' || '$CI_COMMIT_BRANCH =~ /^($PROTECTED_CD_BRANCHES)$/') && $ONLY_RELEASE == null
-    - when: never
+    - !reference [.default_rules, rules]
 
 test:
   stage: test
@@ -32,8 +43,7 @@ test:
     - echo "Testing the code"
 #    - cd tests/ && pytest -v
   rules:
-    - if: ('$CI_COMMIT_BRANCH =~ /^($STANDARD_CD_BRANCHES)$/' || '$CI_COMMIT_BRANCH =~ /^($PROTECTED_CD_BRANCHES)$/') && $ONLY_RELEASE == null
-    - when: never
+    - !reference [.default_rules, rules]
 
 deploy:
   image :
@@ -43,8 +53,7 @@ deploy:
   script:
     - sh .gitlab/deployment.sh
   rules:
-    - if: ('$CI_COMMIT_BRANCH =~ /^($STANDARD_CD_BRANCHES)$/' || '$CI_COMMIT_BRANCH =~ /^($PROTECTED_CD_BRANCHES)$/') && $ONLY_RELEASE == null
-    - when: never
+    - !reference [.default_rules, rules]
 
 release:
   image:
@@ -54,7 +63,4 @@ release:
   script:
     - bash .gitlab/release.sh
   rules:
-    - if: ('$CI_COMMIT_BRANCH =~ /^($STANDARD_CD_BRANCHES)$/') && $ENABLE_RELEASE == "true"
-    - if: ('$CI_COMMIT_BRANCH =~ /^($PROTECTED_CD_BRANCHES)$/') && $ENABLE_RELEASE == "true"
-      when: manual
-    - when: never
+    - !reference [.release_rules, rules]
