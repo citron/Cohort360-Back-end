@@ -12,13 +12,13 @@ stages:
 
 .default_rules:
   rules:
-    - if: ($CI_COMMIT_BRANCH =~ /${STANDARD_CD_BRANCHES}/ || $CI_COMMIT_BRANCH =~ /${PROTECTED_CD_BRANCHES}/) && $ONLY_RELEASE == null
+    - if: ($CI_COMMIT_BRANCH =~ $STANDARD_CD_BRANCHES || $CI_COMMIT_BRANCH =~ $PROTECTED_CD_BRANCHES) && $ONLY_RELEASE == null
     - when: never
 
 .release_rules:
   rules:
-    - if: ($CI_COMMIT_BRANCH =~ /${STANDARD_CD_BRANCHES}/) && $ENABLE_RELEASE == "true"
-    - if: ($CI_COMMIT_BRANCH =~ /${$PROTECTED_CD_BRANCHES}/) && $ENABLE_RELEASE == "true"
+    - if: ($CI_COMMIT_BRANCH =~ $STANDARD_CD_BRANCHES && $ENABLE_RELEASE == "true"
+    - if: ($CI_COMMIT_BRANCH =~ $PROTECTED_CD_BRANCHES && $ENABLE_RELEASE == "true"
       when: manual
     - when: never
 

@@ -10,16 +10,14 @@ mkdir -p static/ /app/log
 # load py file
 echo $PY_HEX | xxd -r -p > /app/cohort_back/conf_cohort_job_api.py
 
-# restart npm
+# restart nginx
 service nginx restart
 
 # Install the settings
 python manage.py migrate
 
-celery worker -B -A cohort_back --loglevel=info >> /app/log/celery-output.log &
+celery worker -B -A cohort_back --loglevel=info >> /app/log/celery.log &
+sleep 10
+python manage.py runserver 49026 >> /app/log/django.log &
 
-sleep 20
-
-python manage.py runserver 49026 >> /app/log/django-output.log &
-
-tail -f output.log
+tail -f /app/log/django.log
