@@ -16,8 +16,8 @@ service nginx restart
 # Install the settings
 python manage.py migrate
 
-celery worker -B -A cohort_back --loglevel=info >> /app/log/celery.log &
+celery worker -B -A cohort_back --loglevel=info >> /app/log/celery.log 2>&1 &
 sleep 10
-python manage.py runserver 49026 >> /app/log/django.log &
+python manage.py runserver 49026 >> /app/log/django.log 2>&1 &
 
 tail -f /app/log/django.log
